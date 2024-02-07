@@ -1,0 +1,8 @@
+click==8.1.7
+cytoolz==0.12.3
+eth-hash==0.6.0
+eth-typing==4.0.0
+eth-utils==3.0.0
+psycopg2-binary==2.9.9
+PyYAML==6.0.1
+toolz==0.12.1
