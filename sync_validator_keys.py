@@ -41,7 +41,6 @@ WEB3SIGNER_URL_ENV = "WEB3SIGNER_URL"
     callback=validate_env_name,
 )
 def sync_validator_keys(
-    network: str,
     db_url: str,
     index: int,
     output_dir: str,
