@@ -1,8 +1,7 @@
-import json
 import os
 from os import mkdir
 from os.path import exists, join
-from typing import Dict, List
+from typing import List
 
 import click
 import yaml
@@ -76,8 +75,7 @@ def sync_validator_keys(
     # save lighthouse config
     web3signer_url = os.environ[web3signer_url_env]
     lighthouse_config = _generate_lighthouse_config(
-        public_keys=keys,
-        web3signer_url=web3signer_url
+        public_keys=keys, web3signer_url=web3signer_url
     )
     with open(join(output_dir, LIGHTHOUSE_CONFIG_FILENAME), "w") as f:
         f.write(lighthouse_config)

@@ -2,7 +2,6 @@ import os
 import re
 
 import click
-from eth_utils import is_address, to_checksum_address
 
 
 # click callbacks
