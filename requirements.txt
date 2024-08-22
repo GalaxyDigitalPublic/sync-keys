@@ -3,7 +3,7 @@ cytoolz==0.12.3
 eth-hash==0.7.0
 eth-typing==5.0.0
 eth-utils==5.0.0
-pycryptodome=3.20.0
+pycryptodome==3.20.0
 psycopg2-binary==2.9.9
 PyYAML==6.0.2
 toolz==0.12.1
