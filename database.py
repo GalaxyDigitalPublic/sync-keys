@@ -44,7 +44,7 @@ class Database:
                 )
 
     def fetch_public_keys_by_validator_index(
-        self, validator_index: int
+        self, validator_index: str
     ) -> List[Tuple[str, Optional[str]]]:
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:

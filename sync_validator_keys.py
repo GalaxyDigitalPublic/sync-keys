@@ -55,7 +55,7 @@ def sync_validator_keys(
     """
     # The statefulset will number these statefulsetname-n with n being 0 to replicas-1
     hostname = platform.node().split(".")[0]
-    index = int(hostname.split("-")[-1])
+    index = hostname.split("-")[-1]
 
     check_db_connection(db_url)
 
