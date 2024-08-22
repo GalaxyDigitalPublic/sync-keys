@@ -1,4 +1,5 @@
 import os
+import platform
 from os import mkdir
 from os.path import exists, join
 from typing import List, Tuple, Optional
@@ -21,17 +22,13 @@ WEB3SIGNER_URL_ENV = "WEB3SIGNER_URL"
 @click.option(
     "--db-url",
     help="The database connection address.",
-    prompt="Enter the database connection string, ex. 'postgresql://username:pass@hostname/dbname'",
+    required=True,
     callback=validate_db_uri,
-)
-@click.option(
-    "--index",
-    help="The validator index.",
-    prompt="Enter the validator index.",
 )
 @click.option(
     "--output-dir",
     help="The folder where validator keys will be saved.",
+    required=True,
     type=click.Path(exists=False, file_okay=False, dir_okay=True),
 )
 @click.option(
@@ -43,12 +40,11 @@ WEB3SIGNER_URL_ENV = "WEB3SIGNER_URL"
 @click.option(
     "--default-recipient",
     help="The default fee recipient starting with 0x.",
-    prompt="Enter the default fee recipient Ethereum address",
+    required=True,
     callback=validate_eth_address,
 )
 def sync_validator_keys(
     db_url: str,
-    index: int,
     output_dir: str,
     web3signer_url_env: str,
     default_recipient: str,
@@ -57,6 +53,10 @@ def sync_validator_keys(
     The command is run by the init container in validator pods.
     Fetch public keys for a specific validator index and store them in the output_dir
     """
+    # The statefulset will number these statefulsetname-n with n being 0 to replicas-1
+    hostname = platform.node().split(".")[0]
+    index = int(hostname.split("-")[-1])
+
     check_db_connection(db_url)
 
     database = Database(db_url=db_url)
