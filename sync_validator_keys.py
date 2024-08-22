@@ -1,14 +1,14 @@
 import os
 from os import mkdir
 from os.path import exists, join
-from typing import List
+from typing import List, Tuple, Optional
 
 import click
 import yaml
 
 from database import Database, check_db_connection
 from utils import is_lists_equal
-from validators import validate_db_uri, validate_env_name
+from validators import validate_db_uri, validate_env_name, validate_eth_address
 
 PUBLIC_KEYS_CSV_FILENAME = "validator_keys.csv"
 LIGHTHOUSE_CONFIG_FILENAME = "validator_definitions.yml"
@@ -40,14 +40,21 @@ WEB3SIGNER_URL_ENV = "WEB3SIGNER_URL"
     default=WEB3SIGNER_URL_ENV,
     callback=validate_env_name,
 )
+@click.option(
+    "--default-recipient",
+    help="The default fee recipient starting with 0x.",
+    prompt="Enter the default fee recipient Ethereum address",
+    callback=validate_eth_address,
+)
 def sync_validator_keys(
     db_url: str,
     index: int,
     output_dir: str,
     web3signer_url_env: str,
+    default_recipient: str,
 ) -> None:
     """
-    The command is running by the init container in validator pods.
+    The command is run by the init container in validator pods.
     Fetch public keys for a specific validator index and store them in the output_dir
     """
     check_db_connection(db_url)
@@ -74,13 +81,17 @@ def sync_validator_keys(
     # save lighthouse config
     web3signer_url = os.environ[web3signer_url_env]
     lighthouse_config = _generate_lighthouse_config(
-        public_keys=keys, web3signer_url=web3signer_url
+        public_keys_with_recipient=keys,
+        web3signer_url=web3signer_url,
+        default_recipient=default_recipient,
     )
     with open(join(output_dir, LIGHTHOUSE_CONFIG_FILENAME), "w") as f:
         f.write(lighthouse_config)
 
     # save teku/prysm config
-    signer_keys_config = _generate_signer_keys_config(public_keys=keys)
+    signer_keys_config = _generate_signer_keys_config(
+        public_keys_with_recipient=keys, default_recipient=default_recipient
+    )
     with open(join(output_dir, SIGNER_CONFIG_FILENAME), "w") as f:
         f.write(signer_keys_config)
 
@@ -92,8 +103,9 @@ def sync_validator_keys(
 
 
 def _generate_lighthouse_config(
-    public_keys: List[str],
+    public_keys_with_recipient: List[Tuple[str, Optional[str]]],
     web3signer_url: str,
+    default_recipient: str,
 ) -> str:
     """
     Generate config for Lighthouse clients
@@ -104,8 +116,11 @@ def _generate_lighthouse_config(
             "voting_public_key": public_key,
             "type": "web3signer",
             "url": web3signer_url,
+            "suggested_fee_recipient": (
+                fee_recipient if fee_recipient is not None else default_recipient
+            ),
         }
-        for public_key in public_keys
+        for public_key, fee_recipient in public_keys_with_recipient
     ]
 
     return yaml.dump(items, explicit_start=True)
@@ -122,9 +137,12 @@ def _load_lighthouse_config(file) -> List[str]:
         return []
 
 
-def _generate_signer_keys_config(public_keys: List[str]) -> str:
+def _generate_signer_keys_config(
+    public_keys_with_recipient: List[Tuple[str, Optional[str]]],
+    default_recipient: str,
+) -> str:
     """
     Generate config for Teku and Prysm clients
     """
-    keys = ",".join([f'"{public_key}"' for public_key in public_keys])
+    keys = ",".join([f'"{public_key}"' for public_key in public_keys_with_recipient])
     return f"""validators-external-signer-public-keys: [{keys}]"""

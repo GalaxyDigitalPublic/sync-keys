@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple, Optional
 from urllib.parse import urlparse
 
 import click
@@ -43,15 +43,43 @@ class Database:
                     ],
                 )
 
-    def fetch_public_keys_by_validator_index(self, validator_index: int) -> List[str]:
+    def fetch_public_keys_by_validator_index(
+        self, validator_index: int
+    ) -> List[Tuple[str, Optional[str]]]:
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:
+                # Check if the fee_recipient column exists
                 cur.execute(
-                    "select public_key from keys where validator_index= %s",
-                    (validator_index,),
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name='keys' AND column_name='fee_recipient';
+                """
                 )
+                fee_recipient_exists = cur.fetchone() is not None
+                if fee_recipient_exists:
+                    # If the fee_recipient column exists, include it in the query
+                    cur.execute(
+                        """
+                        SELECT public_key, fee_recipient
+                        FROM keys
+                        WHERE validator_index = %s;
+                    """,
+                        (validator_index,),
+                    )
+                else:
+                    # If the fee_recipient column does not exist, query only public_key
+                    cur.execute(
+                        """
+                        SELECT public_key, NULL AS fee_recipient
+                        FROM keys
+                        WHERE validator_index = %s;
+                    """,
+                        (validator_index,),
+                    )
+
                 rows = cur.fetchall()
-                return [row[0] for row in rows]
+                return [(row[0], row[1]) for row in rows]
 
     def fetch_keys(self) -> List[DatabaseKeyRecord]:
         with _get_db_connection(self.db_url) as conn:
