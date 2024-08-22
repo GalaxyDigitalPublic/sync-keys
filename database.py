@@ -43,9 +43,7 @@ class Database:
                     ],
                 )
 
-    def fetch_public_keys_by_validator_index(
-        self, validator_index: str
-    ) -> List[Tuple[str, Optional[str]]]:
+    def fetch_public_keys(self) -> List[Tuple[str, Optional[str]]]:
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:
                 # Check if the fee_recipient column exists
@@ -62,20 +60,16 @@ class Database:
                     cur.execute(
                         """
                         SELECT public_key, fee_recipient
-                        FROM keys
-                        WHERE validator_index = %s;
-                    """,
-                        (validator_index,),
+                        FROM keys;
+                    """
                     )
                 else:
                     # If the fee_recipient column does not exist, query only public_key
                     cur.execute(
                         """
                         SELECT public_key, NULL AS fee_recipient
-                        FROM keys
-                        WHERE validator_index = %s;
-                    """,
-                        (validator_index,),
+                        FROM keys;
+                    """
                     )
 
                 rows = cur.fetchall()
