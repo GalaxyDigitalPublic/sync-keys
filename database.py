@@ -24,20 +24,22 @@ class Database:
                         public_key TEXT UNIQUE NOT NULL,
                         private_key TEXT UNIQUE NOT NULL,
                         nonce TEXT NOT NULL,
-                        validator_index TEXT NOT NULL)
+                        validator_index TEXT NOT NULL,
+                        fee_recipient TEXT)
                     ;"""
                 )
 
                 # insert keys
                 execute_values(
                     cur,
-                    "INSERT INTO keys (public_key, private_key, nonce, validator_index) VALUES %s",
+                    "INSERT INTO keys (public_key, private_key, nonce, validator_index, fee_recipient) VALUES %s",
                     [
                         (
                             x["public_key"],
                             x["private_key"],
                             x["nonce"],
                             x["validator_index"],
+                            x["fee_recipient"],
                         )
                         for x in keys
                     ],
@@ -92,6 +94,7 @@ class Database:
                         private_key=row[1],
                         nonce=row[2],
                         validator_index=row[3],
+                        fee_recipient=row[4],
                     )
                     for row in rows
                 ]

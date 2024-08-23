@@ -3,8 +3,10 @@ cytoolz==0.12.3
 eth-hash==0.7.0
 eth-typing==5.0.0
 eth-utils==5.0.0
-pycryptodome==3.20.0
 psycopg2-binary==2.9.9
+pycryptodome==3.20.0
+py-ecc==7.0.1
 PyYAML==6.0.2
+ethstaker-deposit @ git+https://github.com/eth-educators/ethstaker-deposit-cli@v0.1.2
 toolz==0.12.1
 web3==7.0.0

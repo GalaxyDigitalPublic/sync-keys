@@ -1,4 +1,4 @@
-from typing import Dict, List, NamedTuple, NewType, TypedDict
+from typing import Dict, List, NamedTuple, NewType, Optional, TypedDict
 
 from eth_typing import HexStr
 
@@ -6,6 +6,11 @@ BLSPrivkey = NewType("BLSPrivkey", int)
 Bytes32 = NewType("Bytes32", bytes)
 Bytes4 = NewType("Bytes4", bytes)
 Gwei = NewType("Gwei", int)
+
+
+class DBKeyInfo(NamedTuple):
+    secret_key: int
+    fee_recipient: Optional[str]
 
 
 class KeyPair(TypedDict):
@@ -37,6 +42,7 @@ class DatabaseKeyRecord(TypedDict):
     private_key: str
     nonce: str
     validator_index: int
+    fee_recipient: Optional[str]
 
 
 class MigrationKey(TypedDict):
