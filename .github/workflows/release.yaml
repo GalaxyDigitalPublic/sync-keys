@@ -57,7 +57,9 @@ jobs:
           python-version: ${{ matrix.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: pip install -r requirements.txt;
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
 
       - name: Get the version
         id: get_version
