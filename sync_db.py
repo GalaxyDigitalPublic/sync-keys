@@ -1,5 +1,5 @@
 import os
-from sys import exit
+import sys
 import math
 
 from typing import Dict
@@ -58,6 +58,7 @@ def sync_db(
 
     # Top-level dir, no specific fee recipient
     fee_recipient = None
+    private_keys_dir = os.path.expanduser(private_keys_dir)
     keyfiles = glob.glob(os.path.join(private_keys_dir, "keystore*.json"))
     if keyfiles:
         decrypt_key = click.prompt(
@@ -66,24 +67,31 @@ def sync_db(
             hide_input=True,
         )
 
-        for filename in keyfiles:
-            keystore = Keystore.from_file(filename)
+        with click.progressbar(
+            length=len(keyfiles),
+            label="Decrypting private keys:\t\t",
+            show_percent=False,
+            show_pos=True,
+        ) as bar:
+            for filename in keyfiles:
+                keystore = Keystore.from_file(filename)
 
-            try:
-                secret_bytes = keystore.decrypt(decrypt_key)
-            except Exception:
-                click.secho(
-                    f"Unable to decrypt {filename} with the provided password",
-                    bold=True,
-                    err=True,
-                    fg="red",
+                try:
+                    secret_bytes = keystore.decrypt(decrypt_key)
+                except Exception:
+                    click.secho(
+                        f"Unable to decrypt {filename} with the provided password",
+                        bold=True,
+                        err=True,
+                        fg="red",
+                    )
+
+                    sys.exit("Password incorrect")
+
+                keypairs["0x" + keystore.pubkey] = DBKeyInfo(
+                    int.from_bytes(secret_bytes, "big"), fee_recipient
                 )
-
-                exit("Password incorrect")
-
-            keypairs["0x" + keystore.pubkey] = DBKeyInfo(
-                int.from_bytes(secret_bytes, "big"), fee_recipient
-            )
+                bar.update(1)
 
     # Look for directories that encode a specific fee recipient
     for root, dirs, files in os.walk(private_keys_dir):
@@ -97,32 +105,39 @@ def sync_db(
                 except ValueError:
                     continue
                 dir_path = os.path.join(root, dir_name)
-                decrypt_key = click.prompt(
-                    f"Enter the password to decrypt validators private keys in {dir_path}",
-                    type=click.STRING,
-                    hide_input=True,
-                )
-
-                for keystore_file in glob.glob(
-                    os.path.join(dir_path, "keystore*.json")
-                ):
-                    keystore = Keystore.from_file(filename)
-
-                    try:
-                        secret_bytes = keystore.decrypt(decrypt_key)
-                    except Exception:
-                        click.secho(
-                            f"Unable to decrypt {filename} with the provided password",
-                            bold=True,
-                            err=True,
-                            fg="red",
-                        )
-
-                        exit("Password incorrect")
-
-                    keypairs["0x" + keystore.pubkey] = DBKeyInfo(
-                        int.from_bytes(secret_bytes, "big"), fee_recipient
+                keyfiles = glob.glob(os.path.join(dir_path, "keystore*.json"))
+                if keyfiles:
+                    decrypt_key = click.prompt(
+                        f"Enter the password to decrypt validators private keys in {dir_path}",
+                        type=click.STRING,
+                        hide_input=True,
                     )
+
+                    with click.progressbar(
+                        length=len(keyfiles),
+                        label="Decrypting private keys:\t\t",
+                        show_percent=False,
+                        show_pos=True,
+                    ) as bar:
+                        for filename in keyfiles:
+                            keystore = Keystore.from_file(filename)
+
+                            try:
+                                secret_bytes = keystore.decrypt(decrypt_key)
+                            except Exception:
+                                click.secho(
+                                    f"Unable to decrypt {filename} with the provided password",
+                                    bold=True,
+                                    err=True,
+                                    fg="red",
+                                )
+
+                                sys.exit("Password incorrect")
+
+                            keypairs["0x" + keystore.pubkey] = DBKeyInfo(
+                                int.from_bytes(secret_bytes, "big"), fee_recipient
+                            )
+                            bar.update(1)
 
     click.confirm(
         f"Found {len(keypairs)} key pairs, apply changes to the database?",
