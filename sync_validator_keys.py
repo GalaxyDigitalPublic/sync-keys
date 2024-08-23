@@ -43,18 +43,11 @@ WEB3SIGNER_URL_ENV = "WEB3SIGNER_URL"
     required=True,
     callback=validate_eth_address,
 )
-@click.option(
-    "--total-validators",
-    help="The total number of validators connected to the web3signer.",
-    required=True,
-    type=click.IntRange(min=1),
-)
 def sync_validator_keys(
     db_url: str,
     output_dir: str,
     web3signer_url_env: str,
     default_recipient: str,
-    total_validators: int,
 ) -> None:
     """
     The command is run by the init container in validator pods.
@@ -67,23 +60,7 @@ def sync_validator_keys(
     check_db_connection(db_url)
 
     database = Database(db_url=db_url)
-    keys = database.fetch_public_keys()
-
-    public_keys_count = len(keys)
-    start_index, end_index = _get_key_indexes(
-        public_keys_count=public_keys_count,
-        validator_index=int(index),
-        total_validators=total_validators,
-    )
-    if not 0 <= start_index < end_index <= public_keys_count:
-        raise click.ClickException("Invalid validator index, this is a bug")
-
-    # get public keys for this validator
-    keys = keys[start_index:end_index]
-    if not keys:
-        raise click.ClickException(
-            "Failed to get range of public keys for the validator, this is a bug"
-        )
+    keys = database.fetch_public_keys_by_validator_index(validator_index=index)
 
     if not exists(output_dir):
         mkdir(output_dir)
@@ -169,14 +146,3 @@ def _generate_signer_keys_config(
     """
     keys = ",".join([f'"{public_key}"' for public_key in public_keys_with_recipient])
     return f"""validators-external-signer-public-keys: [{keys}]"""
-
-
-def _get_key_indexes(
-    public_keys_count: int,
-    total_validators: int,
-    validator_index: int,
-) -> tuple[int, int]:
-    keys_per_validator = (public_keys_count - 1) // total_validators + 1
-    start_index = keys_per_validator * validator_index
-    end_index = min(start_index + keys_per_validator, public_keys_count)
-    return start_index, end_index
