@@ -30,6 +30,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install git
+        run: sudo apt-get update && sudo apt-get install -y git
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
