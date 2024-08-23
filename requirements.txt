@@ -7,3 +7,4 @@ pycryptodome==3.20.0
 psycopg2-binary==2.9.9
 PyYAML==6.0.2
 toolz==0.12.1
+web3==7.0.0
