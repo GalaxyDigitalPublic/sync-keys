@@ -38,7 +38,8 @@ jobs:
           - OS: windows-latest
             PYTHON_VERSION: 3.12
             BUILD_CMD: |
-              $BUILD_FILE_NAME = "sync-keys-" + $env:RELEASE_VERSION + "-windows-amd64"
+              $RELEASE_VERSION = $env:GITHUB_REF.replace('refs/tags/', '')
+              $BUILD_FILE_NAME = "sync-keys-" + $RELEASE_VERSION + "-windows-amd64"
               $BUILD_FILE_NAME_PATH = ".\" + $BUILD_FILE_NAME
               pyinstaller --onefile ./sync_keys/main.py --name sync-keys --copy-metadata py_ecc --distpath ${BUILD_FILE_NAME_PATH};
               $ZIP_FILE_NAME = $BUILD_FILE_NAME + ".zip"
