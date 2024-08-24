@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sync-keys"
+version = "0.3.0"
+description = "Helper script for eth-staking-charts"
+dependencies = [
+    "click",
+    "cytoolz",
+    "eth-hash",
+    "eth-typing",
+    "eth-utils",
+    "psycopg2-binary",
+    "pycryptodome",
+    "py-ecc",
+    "PyYAML",
+    "ethstaker-deposit @ git+https://github.com/eth-educators/ethstaker-deposit-cli",
+    "toolz",
+    "web3"
+]

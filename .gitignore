@@ -2,3 +2,4 @@ sync-keys
 __pycache__
 build
 *.spec
+dist
