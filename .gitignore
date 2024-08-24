@@ -2,4 +2,5 @@ sync-keys
 __pycache__
 build
 *.spec
+*.egg-info
 dist

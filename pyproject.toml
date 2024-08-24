@@ -1,11 +1,16 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "sync-keys"
-version = "0.3.0"
+version = "0.3.1"
+authors = [
+    {name = "Thorsten Behrens", email = "yorickdowne@gmail.com"},
+    {name = "Dmitri Tsumak", email = "tsumak.dmitri@gmail.com"}
+]
 description = "Helper script for eth-staking-charts"
+readme = "README.md"
 dependencies = [
     "click",
     "cytoolz",
@@ -20,3 +25,10 @@ dependencies = [
     "toolz",
     "web3"
 ]
+requires-python = ">=3.9,<4"
+
+[project.scripts]
+sync-keys = "sync_keys.main:main"
+
+[project.urls]
+"Homepage" = "https://github.com/CryptoManufaktur-io/sync-keys"
