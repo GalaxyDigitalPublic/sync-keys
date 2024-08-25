@@ -4,7 +4,14 @@ sync-keys is a helper script for eth-staking-charts. It was adapted from stakewi
 
 # Use
 
-Create a virtual environment and install prerequisites, then run `python3 sync_keys/main.py`
+Create a virtual environment and install prerequisites:
+```
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+````
+
+and run with `python3 sync_keys/main.py sync-db`
 
 
 `sync-db` - takes `keystore*.json` files and uploads them to the keys database, e.g. `web3signer-keys`.
