@@ -1,4 +1,4 @@
-sync-keys
+.venv
 __pycache__
 build
 *.spec
