@@ -1,10 +1,10 @@
-FROM python:3.13-slim-trixie
+FROM python:3.12-slim-bookworm
 
 ARG VERSION
 
 LABEL org.label-schema.version=$VERSION
 
-RUN apt-get update && apt-get install -y git build-essential
+RUN apt-get update && apt-get install -y git
 
 COPY ./requirements.txt /src/requirements.txt
 
