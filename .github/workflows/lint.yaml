@@ -1,12 +1,24 @@
-name: Code Quality
+name: Lint sources
+run-name: Lint sources
 
-on: [pull_request, push]
+on:
+  push:
+  pull_request:
+    branches: [main]
 
 jobs:
-  pre-commit:
-    name: Linting
+  lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
-    - uses: pre-commit/action@v3.0.1
+      - uses: actions/checkout@v5
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+          cache: 'pip'
+      - name: Lint sources
+        uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --all-files --show-diff-on-failure
