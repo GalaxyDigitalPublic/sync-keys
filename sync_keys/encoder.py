@@ -1,7 +1,7 @@
 from functools import cached_property
 
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
+from Crypto.Cipher import AES  # nosec B413
+from Crypto.Random import get_random_bytes  # nosec B413
 
 from utils import bytes_to_str, str_to_bytes
 
