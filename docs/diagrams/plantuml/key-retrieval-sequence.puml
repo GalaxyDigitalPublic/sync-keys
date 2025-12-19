@@ -1,0 +1,77 @@
+@startuml key-retrieval-sequence
+!theme plain
+skinparam linetype ortho
+skinparam nodesep 150
+skinparam ranksep 180
+
+title Key Retrieval Flows
+
+box "Validator Pod" #LightBlue
+    participant "Init Container\nsync-validator-keys" as ValInit
+    participant "Validator Client" as VC
+end box
+
+box "Web3Signer Pod" #LightGreen
+    participant "Init Container\nsync-web3signer-keys" as WSInit
+    participant "Web3Signer" as WS
+end box
+
+database "PostgreSQL" as DB
+participant "Decoder" as Dec
+
+== Validator Init Container ==
+
+ValInit -> ValInit : hostname = "validator-0"
+ValInit -> ValInit : index = hostname.split("-")[-1]
+note right: Extracts "0" from pod name
+
+ValInit -> DB : fetch_public_keys_by_validator_index("0")
+DB --> ValInit : [(public_key, fee_recipient), ...]
+
+ValInit -> ValInit : generate Lighthouse config
+note right
+  validator_definitions.yml:
+  - enabled: true
+    voting_public_key: 0x...
+    type: web3signer
+    url: $WEB3SIGNER_URL
+end note
+
+ValInit -> ValInit : generate Teku/Prysm config
+note right
+  signer_keys.yml:
+  validators-external-signer-public-keys: [...]
+end note
+
+ValInit -> VC : (container starts with configs)
+
+== Web3Signer Init Container ==
+
+WSInit -> WSInit : read DECRYPTION_KEY env var
+
+WSInit -> DB : fetch_keys()
+DB --> WSInit : List[DatabaseKeyRecord]
+
+loop for each key record
+    WSInit -> Dec : decrypt(private_key, nonce)
+    Dec --> WSInit : decrypted private key
+
+    WSInit -> WSInit : hex encode with\n64-char zero padding
+end
+
+WSInit -> WSInit : write key_N.yaml files
+note right
+  key_0.yaml:
+  type: file-raw
+  keyType: BLS
+  privateKey: "0x..."
+end note
+
+WSInit -> WS : (container starts with key files)
+
+== Runtime ==
+
+VC -> WS : sign(public_key, data)
+WS --> VC : signature
+
+@enduml

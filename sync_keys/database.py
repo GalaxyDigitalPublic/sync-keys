@@ -9,8 +9,9 @@ from typings import DatabaseKeyRecord
 
 
 class Database:
-    def __init__(self, db_url: str):
+    def __init__(self, db_url: str, table_name: str = "keys"):
         self.db_url = db_url
+        self.table_name = table_name
 
     def update_keys(self, keys: List[DatabaseKeyRecord]) -> None:
         """Updates database records to new state."""
@@ -18,9 +19,9 @@ class Database:
             with conn.cursor() as cur:
                 # recreate table
                 cur.execute(
-                    """
-                    DROP TABLE IF EXISTS keys;
-                    CREATE TABLE keys (
+                    f"""
+                    DROP TABLE IF EXISTS {self.table_name};
+                    CREATE TABLE {self.table_name} (
                         public_key TEXT UNIQUE NOT NULL,
                         private_key TEXT UNIQUE NOT NULL,
                         nonce TEXT NOT NULL,
@@ -32,7 +33,7 @@ class Database:
                 # insert keys
                 execute_values(
                     cur,
-                    "INSERT INTO keys (public_key, private_key, nonce, validator_index, fee_recipient) VALUES %s",
+                    f"INSERT INTO {self.table_name} (public_key, private_key, nonce, validator_index, fee_recipient) VALUES %s",  # nosec B608
                     [
                         (
                             x["public_key"],
@@ -51,32 +52,33 @@ class Database:
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:
                 # Check if the fee_recipient column exists
+                # table_name is from CLI, not user input - nosec B608
                 cur.execute(
-                    """
+                    f"""
                     SELECT column_name
                     FROM information_schema.columns
-                    WHERE table_name='keys' AND column_name='fee_recipient';
-                """
+                    WHERE table_name='{self.table_name}' AND column_name='fee_recipient';
+                """  # nosec B608
                 )
                 fee_recipient_exists = cur.fetchone() is not None
                 if fee_recipient_exists:
                     # If the fee_recipient column exists, include it in the query
                     cur.execute(
-                        """
+                        f"""
                         SELECT public_key, fee_recipient
-                        FROM keys
+                        FROM {self.table_name}
                         WHERE validator_index = %s;
-                    """,
+                    """,  # nosec B608
                         (validator_index,),
                     )
                 else:
                     # If the fee_recipient column does not exist, query only public_key
                     cur.execute(
-                        """
+                        f"""
                         SELECT public_key, NULL AS fee_recipient
-                        FROM keys
+                        FROM {self.table_name}
                         WHERE validator_index = %s;
-                    """,
+                    """,  # nosec B608
                         (validator_index,),
                     )
 
@@ -86,7 +88,7 @@ class Database:
     def fetch_keys(self) -> List[DatabaseKeyRecord]:
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:
-                cur.execute("select * from keys")
+                cur.execute(f"select * from {self.table_name}")  # nosec B608
                 rows = cur.fetchall()
                 return [
                     DatabaseKeyRecord(

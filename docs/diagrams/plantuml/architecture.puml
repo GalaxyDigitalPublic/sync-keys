@@ -1,0 +1,55 @@
+@startuml sync-keys-architecture
+!theme plain
+skinparam linetype ortho
+skinparam nodesep 150
+skinparam ranksep 180
+
+title sync-keys System Architecture
+
+package "Import Phase" {
+  [Keystore Files\n(JSON)] as Keystores
+  [sync-db\nCommand] as SyncDB
+}
+
+database "PostgreSQL" {
+  [keys table\n- public_key\n- private_key (enc)\n- nonce\n- validator_index\n- fee_recipient] as KeysTable
+}
+
+package "Kubernetes Cluster" {
+  package "Validator StatefulSet" {
+    [validator-0\nInit: sync-validator-keys\nContainer: Lighthouse/Teku] as Val0
+    [validator-1\nInit: sync-validator-keys\nContainer: Lighthouse/Teku] as Val1
+    [validator-n\n...] as ValN
+  }
+
+  package "Web3Signer Deployment" {
+    [web3signer-0\nInit: sync-web3signer-keys\nContainer: Web3Signer] as WS0
+    [web3signer-1\nInit: sync-web3signer-keys\nContainer: Web3Signer] as WS1
+  }
+}
+
+cloud "Ethereum Network" {
+  [Beacon Chain] as Beacon
+}
+
+Keystores --> SyncDB : decrypt with\nuser password
+SyncDB --> KeysTable : encrypt with\nAES-EAX
+SyncDB ..> [DECRYPTION_KEY] : outputs
+
+KeysTable --> Val0 : public keys\nfor index 0
+KeysTable --> Val1 : public keys\nfor index 1
+KeysTable --> ValN
+
+KeysTable --> WS0 : encrypted keys
+KeysTable --> WS1 : encrypted keys
+[DECRYPTION_KEY] ..> WS0 : env var
+[DECRYPTION_KEY] ..> WS1 : env var
+
+Val0 --> WS0 : signing requests
+Val1 --> WS1 : signing requests
+ValN --> WS0
+
+WS0 --> Beacon : attestations\n& proposals
+WS1 --> Beacon
+
+@enduml
