@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 
 import click
 import psycopg2
+from psycopg2 import sql
 from psycopg2.extras import execute_values
 
 from typings import DatabaseKeyRecord
@@ -19,21 +20,23 @@ class Database:
             with conn.cursor() as cur:
                 # recreate table
                 cur.execute(
-                    f"""
-                    DROP TABLE IF EXISTS {self.table_name};
-                    CREATE TABLE {self.table_name} (
+                    sql.SQL("""
+                    DROP TABLE IF EXISTS {table};
+                    CREATE TABLE {table} (
                         public_key TEXT UNIQUE NOT NULL,
                         private_key TEXT UNIQUE NOT NULL,
                         nonce TEXT NOT NULL,
                         validator_index TEXT NOT NULL,
                         fee_recipient TEXT)
-                    ;"""
+                    ;""").format(table=sql.Identifier(self.table_name))
                 )
 
                 # insert keys
                 execute_values(
                     cur,
-                    f"INSERT INTO {self.table_name} (public_key, private_key, nonce, validator_index, fee_recipient) VALUES %s",  # nosec B608
+                    sql.SQL("INSERT INTO {table} (public_key, private_key, nonce, validator_index, fee_recipient) VALUES %s").format(
+                        table=sql.Identifier(self.table_name)
+                    ),
                     [
                         (
                             x["public_key"],
@@ -52,33 +55,33 @@ class Database:
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:
                 # Check if the fee_recipient column exists
-                # table_name is from CLI, not user input - nosec B608
                 cur.execute(
-                    f"""
+                    sql.SQL("""
                     SELECT column_name
                     FROM information_schema.columns
-                    WHERE table_name='{self.table_name}' AND column_name='fee_recipient';
-                """  # nosec B608
+                    WHERE table_name=%s AND column_name='fee_recipient';
+                """),
+                    (self.table_name,)
                 )
                 fee_recipient_exists = cur.fetchone() is not None
                 if fee_recipient_exists:
                     # If the fee_recipient column exists, include it in the query
                     cur.execute(
-                        f"""
+                        sql.SQL("""
                         SELECT public_key, fee_recipient
-                        FROM {self.table_name}
+                        FROM {table}
                         WHERE validator_index = %s;
-                    """,  # nosec B608
+                    """).format(table=sql.Identifier(self.table_name)),
                         (validator_index,),
                     )
                 else:
                     # If the fee_recipient column does not exist, query only public_key
                     cur.execute(
-                        f"""
+                        sql.SQL("""
                         SELECT public_key, NULL AS fee_recipient
-                        FROM {self.table_name}
+                        FROM {table}
                         WHERE validator_index = %s;
-                    """,  # nosec B608
+                    """).format(table=sql.Identifier(self.table_name)),
                         (validator_index,),
                     )
 
@@ -88,7 +91,11 @@ class Database:
     def fetch_keys(self) -> List[DatabaseKeyRecord]:
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:
-                cur.execute(f"select * from {self.table_name}")  # nosec B608
+                cur.execute(
+                    sql.SQL("SELECT * FROM {table}").format(
+                        table=sql.Identifier(self.table_name)
+                    )
+                )
                 rows = cur.fetchall()
                 return [
                     DatabaseKeyRecord(

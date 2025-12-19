@@ -2,7 +2,7 @@ import os
 import platform
 from os import mkdir
 from os.path import exists, join
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
 import click
 import yaml
@@ -117,18 +117,19 @@ def _generate_lighthouse_config(
     """
     Generate config for Lighthouse clients
     """
-    items = [
-        {
-            "enabled": True,
-            "voting_public_key": public_key,
-            "type": "web3signer",
-            "url": web3signer_url,
-            "suggested_fee_recipient": (
-                fee_recipient if fee_recipient is not None else default_recipient
-            ),
-        }
-        for public_key, fee_recipient in public_keys_with_recipient
-    ]
+    items = []
+    for public_key, fee_recipient in public_keys_with_recipient:
+        items.append(
+            {
+                "enabled": True,
+                "voting_public_key": public_key,
+                "type": "web3signer",
+                "url": web3signer_url,
+                "suggested_fee_recipient": (
+                    fee_recipient if fee_recipient is not None else default_recipient
+                ),
+            }
+        )
 
     return yaml.dump(items, explicit_start=True)
 
