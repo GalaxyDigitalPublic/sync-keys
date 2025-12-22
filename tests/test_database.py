@@ -41,9 +41,10 @@ class TestUpdateKeys:
         db.update_keys(keys=[])
 
         # Check that the executed SQL contains the default table name
-        executed_sql = mock_cursor.execute.call_args[0][0]
-        assert "DROP TABLE IF EXISTS keys" in executed_sql
-        assert "CREATE TABLE keys" in executed_sql
+        executed_sql = str(mock_cursor.execute.call_args[0][0]).lower()
+        assert "identifier('keys')" in executed_sql
+        assert "drop table if exists" in executed_sql
+        assert "create table" in executed_sql
 
     @patch("database.execute_values")
     @patch("database._get_db_connection")
@@ -68,11 +69,12 @@ class TestUpdateKeys:
         )
         db.update_keys(keys=[])
 
-        executed_sql = mock_cursor.execute.call_args[0][0]
-        assert "DROP TABLE IF EXISTS validator_keys" in executed_sql
-        assert "CREATE TABLE validator_keys" in executed_sql
+        executed_sql = str(mock_cursor.execute.call_args[0][0]).lower()
+        assert "identifier('validator_keys')" in executed_sql
+        assert "drop table if exists" in executed_sql
+        assert "create table" in executed_sql
         # Should NOT contain default "keys" table
-        assert "DROP TABLE IF EXISTS keys" not in executed_sql
+        assert "identifier('keys')" not in executed_sql
 
     @patch("database.execute_values")
     @patch("database._get_db_connection")
@@ -98,8 +100,9 @@ class TestUpdateKeys:
         db.update_keys(keys=sample_key_records)
 
         # Check execute_values was called with correct table name
-        insert_sql = mock_execute_values.call_args[0][1]
-        assert "INSERT INTO my_keys" in insert_sql
+        insert_sql = str(mock_execute_values.call_args[0][1]).lower()
+        assert "insert into" in insert_sql
+        assert "identifier('my_keys')" in insert_sql
 
 
 class TestFetchPublicKeysByValidatorIndex:
@@ -125,8 +128,9 @@ class TestFetchPublicKeysByValidatorIndex:
 
         # Check the information_schema query uses default table name
         calls = mock_cursor.execute.call_args_list
-        schema_query = calls[0][0][0]
-        assert "table_name='keys'" in schema_query
+        # Check that the second call (SELECT query) contains the table name
+        select_query = str(calls[1][0][0]).lower()
+        assert "identifier('keys')" in select_query
 
     @patch("database._get_db_connection")
     def test_queries_custom_table(self, mock_get_conn, mock_cursor):
@@ -152,12 +156,11 @@ class TestFetchPublicKeysByValidatorIndex:
         db.fetch_public_keys_by_validator_index(validator_index="0")
 
         calls = mock_cursor.execute.call_args_list
-        # Check information_schema query
-        schema_query = calls[0][0][0]
-        assert "table_name='custom_keys'" in schema_query
-        # Check SELECT query
-        select_query = calls[1][0][0]
-        assert "FROM custom_keys" in select_query
+        # Check information_schema query uses the table name as a parameter
+        assert calls[0][0][1] == ("custom_keys",)
+        # Check SELECT query contains the identifier
+        select_query = str(calls[1][0][0]).lower()
+        assert "identifier('custom_keys')" in select_query
 
     @patch("database._get_db_connection")
     def test_queries_table_without_fee_recipient_column(
@@ -185,9 +188,9 @@ class TestFetchPublicKeysByValidatorIndex:
         db.fetch_public_keys_by_validator_index(validator_index="0")
 
         calls = mock_cursor.execute.call_args_list
-        select_query = calls[1][0][0]
-        assert "FROM legacy_keys" in select_query
-        assert "NULL AS fee_recipient" in select_query
+        select_query = str(calls[1][0][0]).lower()
+        assert "identifier('legacy_keys')" in select_query
+        assert "null as fee_recipient" in select_query
 
 
 class TestFetchKeys:
@@ -210,8 +213,9 @@ class TestFetchKeys:
         db = Database(db_url="postgresql://user:pass@localhost/dbname")
         db.fetch_keys()
 
-        executed_sql = mock_cursor.execute.call_args[0][0]
-        assert "from keys" in executed_sql.lower()
+        executed_sql = str(mock_cursor.execute.call_args[0][0]).lower()
+        assert "identifier('keys')" in executed_sql
+        assert "select * from" in executed_sql
 
     @patch("database._get_db_connection")
     def test_queries_custom_table(self, mock_get_conn, mock_cursor):
@@ -235,12 +239,11 @@ class TestFetchKeys:
         )
         db.fetch_keys()
 
-        executed_sql = mock_cursor.execute.call_args[0][0]
-        assert "from signer_keys" in executed_sql.lower()
-        assert (
-            "from keys" not in executed_sql.lower()
-            or "signer_keys" in executed_sql.lower()
-        )
+        executed_sql = str(mock_cursor.execute.call_args[0][0]).lower()
+        assert "identifier('signer_keys')" in executed_sql
+        assert "select * from" in executed_sql
+        # Should NOT contain default "keys" table
+        assert "identifier('keys')" not in executed_sql
 
     @patch("database._get_db_connection")
     def test_returns_database_key_records(self, mock_get_conn, mock_cursor):

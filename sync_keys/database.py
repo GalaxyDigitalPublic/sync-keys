@@ -34,9 +34,9 @@ class Database:
                 # insert keys
                 execute_values(
                     cur,
-                    sql.SQL("INSERT INTO {table} (public_key, private_key, nonce, validator_index, fee_recipient) VALUES %s").format(
-                        table=sql.Identifier(self.table_name)
-                    ),
+                    sql.SQL(
+                        "INSERT INTO {table} (public_key, private_key, nonce, validator_index, fee_recipient) VALUES %s"
+                    ).format(table=sql.Identifier(self.table_name)),
                     [
                         (
                             x["public_key"],
@@ -61,7 +61,7 @@ class Database:
                     FROM information_schema.columns
                     WHERE table_name=%s AND column_name='fee_recipient';
                 """),
-                    (self.table_name,)
+                    (self.table_name,),
                 )
                 fee_recipient_exists = cur.fetchone() is not None
                 if fee_recipient_exists:
