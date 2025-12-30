@@ -3,14 +3,16 @@ from urllib.parse import urlparse
 
 import click
 import psycopg2
+from psycopg2 import sql
 from psycopg2.extras import execute_values
 
 from typings import DatabaseKeyRecord
 
 
 class Database:
-    def __init__(self, db_url: str):
+    def __init__(self, db_url: str, table_name: str = "keys"):
         self.db_url = db_url
+        self.table_name = table_name
 
     def update_keys(self, keys: List[DatabaseKeyRecord]) -> None:
         """Updates database records to new state."""
@@ -18,21 +20,23 @@ class Database:
             with conn.cursor() as cur:
                 # recreate table
                 cur.execute(
-                    """
-                    DROP TABLE IF EXISTS keys;
-                    CREATE TABLE keys (
+                    sql.SQL("""
+                    DROP TABLE IF EXISTS {table};
+                    CREATE TABLE {table} (
                         public_key TEXT UNIQUE NOT NULL,
                         private_key TEXT UNIQUE NOT NULL,
                         nonce TEXT NOT NULL,
                         validator_index TEXT NOT NULL,
                         fee_recipient TEXT)
-                    ;"""
+                    ;""").format(table=sql.Identifier(self.table_name))
                 )
 
                 # insert keys
                 execute_values(
                     cur,
-                    "INSERT INTO keys (public_key, private_key, nonce, validator_index, fee_recipient) VALUES %s",
+                    sql.SQL(
+                        "INSERT INTO {table} (public_key, private_key, nonce, validator_index, fee_recipient) VALUES %s"
+                    ).format(table=sql.Identifier(self.table_name)),
                     [
                         (
                             x["public_key"],
@@ -52,31 +56,32 @@ class Database:
             with conn.cursor() as cur:
                 # Check if the fee_recipient column exists
                 cur.execute(
-                    """
+                    sql.SQL("""
                     SELECT column_name
                     FROM information_schema.columns
-                    WHERE table_name='keys' AND column_name='fee_recipient';
-                """
+                    WHERE table_name=%s AND column_name='fee_recipient';
+                """),
+                    (self.table_name,),
                 )
                 fee_recipient_exists = cur.fetchone() is not None
                 if fee_recipient_exists:
                     # If the fee_recipient column exists, include it in the query
                     cur.execute(
-                        """
+                        sql.SQL("""
                         SELECT public_key, fee_recipient
-                        FROM keys
+                        FROM {table}
                         WHERE validator_index = %s;
-                    """,
+                    """).format(table=sql.Identifier(self.table_name)),
                         (validator_index,),
                     )
                 else:
                     # If the fee_recipient column does not exist, query only public_key
                     cur.execute(
-                        """
+                        sql.SQL("""
                         SELECT public_key, NULL AS fee_recipient
-                        FROM keys
+                        FROM {table}
                         WHERE validator_index = %s;
-                    """,
+                    """).format(table=sql.Identifier(self.table_name)),
                         (validator_index,),
                     )
 
@@ -86,7 +91,11 @@ class Database:
     def fetch_keys(self) -> List[DatabaseKeyRecord]:
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:
-                cur.execute("select * from keys")
+                cur.execute(
+                    sql.SQL("SELECT * FROM {table}").format(
+                        table=sql.Identifier(self.table_name)
+                    )
+                )
                 rows = cur.fetchall()
                 return [
                     DatabaseKeyRecord(

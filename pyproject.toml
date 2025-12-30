@@ -27,6 +27,13 @@ dependencies = [
 ]
 requires-python = ">=3.9,<4"
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-mock",
+    "pytest-cov",
+]
+
 [project.scripts]
 sync-keys = "sync_keys.main:main"
 

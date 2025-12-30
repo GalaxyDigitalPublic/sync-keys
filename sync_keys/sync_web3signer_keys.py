@@ -35,14 +35,22 @@ DECRYPTION_KEY_ENV = "DECRYPTION_KEY"
     default=DECRYPTION_KEY_ENV,
     callback=validate_env_name,
 )
-def sync_web3signer_keys(db_url: str, output_dir: str, decryption_key_env: str) -> None:
+@click.option(
+    "--table-name",
+    help="Database table name for storing keys.",
+    default="keys",
+    show_default=True,
+)
+def sync_web3signer_keys(
+    db_url: str, output_dir: str, decryption_key_env: str, table_name: str
+) -> None:
     """
     The command is running by the init container in web3signer pods.
     Fetch and decrypt keys for web3signer and store them as keypairs in the output_dir.
     """
     check_db_connection(db_url)
 
-    database = Database(db_url=db_url)
+    database = Database(db_url=db_url, table_name=table_name)
     keys_records = database.fetch_keys()
 
     # decrypt private keys

@@ -1,0 +1,74 @@
+# Cursor Rules for sync-keys
+
+## Project Context
+
+sync-keys is a Python CLI tool for managing Ethereum validator keys. It imports keystores to PostgreSQL and generates configs for Web3Signer and validator clients.
+
+See [docs/](docs/) for full documentation:
+- [docs/AI_CONTEXT.md](docs/AI_CONTEXT.md) - Full AI context
+- [docs/AGENTS.md](docs/AGENTS.md) - Code patterns and prompts
+
+## Tech Stack
+
+- Python 3.9+
+- Click (CLI framework)
+- PostgreSQL (psycopg2)
+- PyCryptodome (AES-EAX encryption)
+- pytest (testing)
+
+## Essential Commands
+
+```bash
+pip install -e ".[test]"     # Install with test deps
+sync-keys <command>          # Run CLI
+pytest                       # Run tests
+pytest --cov=sync_keys       # With coverage
+```
+
+## CLI Commands
+
+- `sync-db` - Import keystores to PostgreSQL
+- `sync-validator-keys` - Generate validator client configs
+- `sync-web3signer-keys` - Generate Web3Signer YAML files
+
+## Key Patterns
+
+### Click Commands
+```python
+@click.command()
+@click.option("--db-url", callback=validate_db_uri)
+def my_command(db_url):
+    check_db_connection(db_url)
+    # ...
+```
+
+### Database Operations
+```python
+db = Database(db_url=url, table_name="keys")
+db.update_keys(records)
+keys = db.fetch_keys()
+```
+
+### Encryption
+```python
+encoder = Encoder()
+encrypted, nonce = encoder.encrypt(data)
+key = encoder.cipher_key_str  # Save for decryption
+
+decoder = Decoder(key)
+original = decoder.decrypt(encrypted_b64, nonce_b64)
+```
+
+## Code Style
+
+- Type hints throughout
+- TypedDict for structured data
+- PEP 8 naming conventions
+- Tests in tests/ directory
+
+## AI Commits
+
+Include in commit messages when AI-assisted:
+```
+AICOAUTH: <model name>
+```

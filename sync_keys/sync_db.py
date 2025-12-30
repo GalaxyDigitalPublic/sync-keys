@@ -37,10 +37,17 @@ from ethstaker_deposit.key_handling.keystore import Keystore
     prompt="Enter the folder holding keystore-m files",
     type=click.Path(exists=False, file_okay=False, dir_okay=True),
 )
+@click.option(
+    "--table-name",
+    help="Database table name for storing keys.",
+    default="keys",
+    show_default=True,
+)
 def sync_db(
     db_url: str,
     validator_capacity: int,
     private_keys_dir: str,
+    table_name: str,
 ) -> None:
     check_db_connection(db_url)
 
@@ -50,6 +57,7 @@ def sync_db(
 
     database = Database(
         db_url=db_url,
+        table_name=table_name,
     )
 
     keypairs: Dict[HexStr, DBKeyInfo] = dict()

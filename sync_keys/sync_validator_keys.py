@@ -2,7 +2,7 @@ import os
 import platform
 from os import mkdir
 from os.path import exists, join
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
 import click
 import yaml
@@ -43,11 +43,18 @@ WEB3SIGNER_URL_ENV = "WEB3SIGNER_URL"
     required=True,
     callback=validate_eth_address,
 )
+@click.option(
+    "--table-name",
+    help="Database table name for storing keys.",
+    default="keys",
+    show_default=True,
+)
 def sync_validator_keys(
     db_url: str,
     output_dir: str,
     web3signer_url_env: str,
     default_recipient: str,
+    table_name: str,
 ) -> None:
     """
     The command is run by the init container in validator pods.
@@ -59,7 +66,7 @@ def sync_validator_keys(
 
     check_db_connection(db_url)
 
-    database = Database(db_url=db_url)
+    database = Database(db_url=db_url, table_name=table_name)
     keys = database.fetch_public_keys_by_validator_index(validator_index=index)
 
     if not exists(output_dir):
@@ -110,18 +117,19 @@ def _generate_lighthouse_config(
     """
     Generate config for Lighthouse clients
     """
-    items = [
-        {
-            "enabled": True,
-            "voting_public_key": public_key,
-            "type": "web3signer",
-            "url": web3signer_url,
-            "suggested_fee_recipient": (
-                fee_recipient if fee_recipient is not None else default_recipient
-            ),
-        }
-        for public_key, fee_recipient in public_keys_with_recipient
-    ]
+    items = []
+    for public_key, fee_recipient in public_keys_with_recipient:
+        items.append(
+            {
+                "enabled": True,
+                "voting_public_key": public_key,
+                "type": "web3signer",
+                "url": web3signer_url,
+                "suggested_fee_recipient": (
+                    fee_recipient if fee_recipient is not None else default_recipient
+                ),
+            }
+        )
 
     return yaml.dump(items, explicit_start=True)
 
