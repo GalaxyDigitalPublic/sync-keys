@@ -126,7 +126,7 @@ def _generate_lighthouse_config(
                 "type": "web3signer",
                 "url": web3signer_url,
                 "suggested_fee_recipient": (
-                    fee_recipient if fee_recipient is not None else default_recipient
+                    fee_recipient if fee_recipient else default_recipient
                 ),
             }
         )
@@ -152,5 +152,5 @@ def _generate_signer_keys_config(
     """
     Generate config for Teku and Prysm clients
     """
-    keys = ",".join([f'"{public_key}"' for public_key in public_keys_with_recipient])
+    keys = ",".join([f'"{public_key}"' for public_key, _ in public_keys_with_recipient])
     return f"""validators-external-signer-public-keys: [{keys}]"""
