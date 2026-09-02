@@ -94,6 +94,15 @@ class Database:
         Used to fail closed: a table carrying client_cluster_id holds more than one
         cluster's keys, so reading it without a predicate must be a deliberate choice.
         """
+        if "." in self.table_name:
+            # to_regclass would resolve "schema.table", but the queries quote table_name as a
+            # single identifier, so detection would succeed and the fetch would then fail with
+            # UndefinedTable. Unqualified names only, consistent with the rest of this class.
+            raise ValueError(
+                f"table_name {self.table_name!r} must be unqualified; set search_path instead "
+                "of qualifying the table."
+            )
+
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:
                 # to_regclass resolves the name through search_path exactly as the SELECT in

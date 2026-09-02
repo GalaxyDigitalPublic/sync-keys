@@ -17,7 +17,7 @@ import pytest
 import database as database_module
 from database import Database
 
-DSN = os.getenv("SYNC_KEYS_TEST_DSN")
+DSN: str = os.getenv("SYNC_KEYS_TEST_DSN", "")
 pytestmark = pytest.mark.skipif(not DSN, reason="SYNC_KEYS_TEST_DSN not set")
 
 

@@ -1,5 +1,6 @@
 import glob
 import os
+import re
 from os import mkdir
 from os.path import exists
 from typing import List, Optional
@@ -14,6 +15,9 @@ from utils import is_lists_equal
 from validators import validate_db_uri, validate_env_name
 
 DECRYPTION_KEY_ENV = "DECRYPTION_KEY"
+
+# Only filenames this command generates are eligible for pruning.
+_GENERATED_KEYSTORE_RE = re.compile(r"key_\d+\.yaml")
 
 
 @click.command(help="Synchronizes web3signer private keys from the database")
@@ -94,6 +98,18 @@ def sync_web3signer_keys(
 
     keys_records = database.fetch_keys(client_cluster_id=client_cluster_id)
 
+    if not keys_records:
+        # Refuse rather than reconcile to nothing. Pruning to an empty directory would leave
+        # web3signer with no keys to sign with, which for an already-serving signer means
+        # silently stopping attestation. A zero-row result almost always means a wrong
+        # cluster id or an unpopulated table, so fail and let the init container block
+        # startup instead.
+        raise click.ClickException(
+            f"No keys found in '{table_name}'"
+            + (f" for cluster '{client_cluster_id}'" if client_cluster_id else "")
+            + ". Refusing to reconcile the keystore directory to empty."
+        )
+
     # decrypt private keys
     decryption_key = os.environ[decryption_key_env]
     decoder = Decoder(decryption_key)
@@ -130,15 +146,19 @@ def sync_web3signer_keys(
     # Remove keystores left behind by a previous, larger key set. web3signer loads every
     # *.yaml in this directory, so without this a run that returns fewer keys than the last
     # one keeps serving the surplus -- which silently defeats --client-cluster-id on an
-    # already-deployed signer. Written first, then pruned, so the directory is never empty.
+    # already-deployed signer. Written first, then pruned, so the generated set is never
+    # momentarily absent.
+    #
+    # Only files this command generates are considered. Anything else in the directory is
+    # left alone: deleting an unrecognised file would be destructive well beyond this
+    # command's remit.
+    keep = {f"key_{i}.yaml" for i in range(len(private_keys))}
     for filename in glob.glob(os.path.join(output_dir, "*.yaml")):
-        if os.path.basename(filename) not in {
-            f"key_{i}.yaml" for i in range(len(private_keys))
-        }:
-            os.remove(filename)
-            click.secho(
-                f"Removed stale keystore {os.path.basename(filename)}.", fg="yellow"
-            )
+        basename = os.path.basename(filename)
+        if not _GENERATED_KEYSTORE_RE.fullmatch(basename) or basename in keep:
+            continue
+        os.remove(filename)
+        click.secho(f"Removed stale keystore {basename}.", fg="yellow")
 
     click.secho(
         f"Web3Signer now uses {len(private_keys)} private keys.\n",
