@@ -115,7 +115,9 @@ class Database:
                 )
                 return cur.fetchone() is not None
 
-    def fetch_keys(self, client_cluster_id: Optional[str] = None) -> List[Web3SignerKeyRecord]:
+    def fetch_keys(
+        self, client_cluster_id: Optional[str] = None
+    ) -> List[Web3SignerKeyRecord]:
         """Fetch the encrypted keystores web3signer needs.
 
         Only public_key, private_key and nonce are selected. SELECT * was previously mapped
@@ -149,9 +151,9 @@ class Database:
                     )
                 else:
                     cur.execute(
-                        sql.SQL("SELECT public_key, private_key, nonce FROM {table}").format(
-                            table=sql.Identifier(self.table_name)
-                        )
+                        sql.SQL(
+                            "SELECT public_key, private_key, nonce FROM {table}"
+                        ).format(table=sql.Identifier(self.table_name))
                     )
                 rows = cur.fetchall()
                 return [

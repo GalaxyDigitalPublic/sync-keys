@@ -2,7 +2,7 @@ import glob
 import os
 from os import mkdir
 from os.path import exists
-from typing import List
+from typing import List, Optional
 
 import click
 import yaml
@@ -60,8 +60,12 @@ DECRYPTION_KEY_ENV = "DECRYPTION_KEY"
     ),
 )
 def sync_web3signer_keys(
-    db_url: str, output_dir: str, decryption_key_env: str, table_name: str,
-    client_cluster_id: str = None, all_clusters: bool = False
+    db_url: str,
+    output_dir: str,
+    decryption_key_env: str,
+    table_name: str,
+    client_cluster_id: Optional[str] = None,
+    all_clusters: bool = False,
 ) -> None:
     """
     The command is running by the init container in web3signer pods.
@@ -72,9 +76,15 @@ def sync_web3signer_keys(
     database = Database(db_url=db_url, table_name=table_name)
 
     if client_cluster_id and all_clusters:
-        raise click.ClickException("--client-cluster-id and --all-clusters are mutually exclusive.")
+        raise click.ClickException(
+            "--client-cluster-id and --all-clusters are mutually exclusive."
+        )
 
-    if not client_cluster_id and not all_clusters and database.has_column("client_cluster_id"):
+    if (
+        not client_cluster_id
+        and not all_clusters
+        and database.has_column("client_cluster_id")
+    ):
         # Fail closed. This table holds more than one cluster's keys, and forgetting the
         # predicate hands this signer private keys belonging to other clusters.
         raise click.ClickException(
@@ -122,9 +132,13 @@ def sync_web3signer_keys(
     # one keeps serving the surplus -- which silently defeats --client-cluster-id on an
     # already-deployed signer. Written first, then pruned, so the directory is never empty.
     for filename in glob.glob(os.path.join(output_dir, "*.yaml")):
-        if os.path.basename(filename) not in {f"key_{i}.yaml" for i in range(len(private_keys))}:
+        if os.path.basename(filename) not in {
+            f"key_{i}.yaml" for i in range(len(private_keys))
+        }:
             os.remove(filename)
-            click.secho(f"Removed stale keystore {os.path.basename(filename)}.", fg="yellow")
+            click.secho(
+                f"Removed stale keystore {os.path.basename(filename)}.", fg="yellow"
+            )
 
     click.secho(
         f"Web3Signer now uses {len(private_keys)} private keys.\n",

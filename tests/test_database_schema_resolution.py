@@ -8,6 +8,7 @@ live server.
 Set SYNC_KEYS_TEST_DSN to enable, e.g.
   SYNC_KEYS_TEST_DSN=postgresql://postgres:pw@127.0.0.1:55433/t pytest tests -q
 """
+
 import os
 
 import psycopg2
@@ -25,14 +26,22 @@ def two_schemas():
     conn = psycopg2.connect(DSN)
     conn.autocommit = True
     cur = conn.cursor()
-    cur.execute("DROP SCHEMA IF EXISTS sk_a CASCADE; DROP SCHEMA IF EXISTS sk_b CASCADE;")
+    cur.execute(
+        "DROP SCHEMA IF EXISTS sk_a CASCADE; DROP SCHEMA IF EXISTS sk_b CASCADE;"
+    )
     cur.execute("CREATE SCHEMA sk_a; CREATE SCHEMA sk_b;")
     # same table name in both schemas, only one carries client_cluster_id
-    cur.execute("CREATE TABLE sk_a.shared (public_key TEXT, private_key TEXT, nonce TEXT, "
-                "client_cluster_id TEXT)")
-    cur.execute("CREATE TABLE sk_b.shared (public_key TEXT, private_key TEXT, nonce TEXT)")
+    cur.execute(
+        "CREATE TABLE sk_a.shared (public_key TEXT, private_key TEXT, nonce TEXT, "
+        "client_cluster_id TEXT)"
+    )
+    cur.execute(
+        "CREATE TABLE sk_b.shared (public_key TEXT, private_key TEXT, nonce TEXT)"
+    )
     yield
-    cur.execute("DROP SCHEMA IF EXISTS sk_a CASCADE; DROP SCHEMA IF EXISTS sk_b CASCADE;")
+    cur.execute(
+        "DROP SCHEMA IF EXISTS sk_a CASCADE; DROP SCHEMA IF EXISTS sk_b CASCADE;"
+    )
     cur.close()
     conn.close()
 
@@ -62,7 +71,9 @@ def test_answer_inverts_when_schema_order_flips(two_schemas, monkeypatch):
     assert Database(DSN, table_name="shared").has_column("client_cluster_id") is False
 
 
-def test_unresolvable_table_aborts_rather_than_reporting_false(two_schemas, monkeypatch):
+def test_unresolvable_table_aborts_rather_than_reporting_false(
+    two_schemas, monkeypatch
+):
     """Detection failure must never fall through to an unfiltered read."""
     _pin_search_path(monkeypatch, "sk_a, sk_b")
     with pytest.raises(ValueError, match="could not be resolved"):

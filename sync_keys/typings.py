@@ -49,6 +49,7 @@ class Web3SignerKeyRecord(TypedDict):
     """What sync-web3signer-keys reads. Deliberately narrower than DatabaseKeyRecord:
     validator_index and fee_recipient are not used on that path and do not exist in the
     key operation service's validator_keys table."""
+
     public_key: HexStr
     private_key: str
     nonce: str

@@ -198,14 +198,18 @@ class TestFetchKeysEmptyClusterId:
     """An empty id previously fell through the truthiness check and returned every cluster."""
 
     def test_empty_string_is_rejected(self):
-        db = Database(db_url="postgresql://user:pass@localhost/dbname",
-                      table_name="validator_keys")
+        db = Database(
+            db_url="postgresql://user:pass@localhost/dbname",
+            table_name="validator_keys",
+        )
         with pytest.raises(ValueError, match="client_cluster_id was empty"):
             db.fetch_keys(client_cluster_id="")
 
     def test_whitespace_only_is_rejected(self):
-        db = Database(db_url="postgresql://user:pass@localhost/dbname",
-                      table_name="validator_keys")
+        db = Database(
+            db_url="postgresql://user:pass@localhost/dbname",
+            table_name="validator_keys",
+        )
         with pytest.raises(ValueError, match="client_cluster_id was empty"):
             db.fetch_keys(client_cluster_id="   ")
 
@@ -215,18 +219,26 @@ class TestHasColumn:
 
     @staticmethod
     def _wire(mock_get_conn, mock_cursor):
-        mock_get_conn.return_value.__enter__ = MagicMock(return_value=mock_get_conn.return_value)
+        mock_get_conn.return_value.__enter__ = MagicMock(
+            return_value=mock_get_conn.return_value
+        )
         mock_get_conn.return_value.__exit__ = MagicMock(return_value=False)
-        mock_get_conn.return_value.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
-        mock_get_conn.return_value.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_get_conn.return_value.cursor.return_value.__enter__ = MagicMock(
+            return_value=mock_cursor
+        )
+        mock_get_conn.return_value.cursor.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
 
     @patch("database._get_db_connection")
     def test_true_when_pg_attribute_has_the_column(self, mock_get_conn, mock_cursor):
         self._wire(mock_get_conn, mock_cursor)
         mock_cursor.fetchone.side_effect = [(16384,), (1,)]
 
-        db = Database(db_url="postgresql://user:pass@localhost/dbname",
-                      table_name="validator_keys")
+        db = Database(
+            db_url="postgresql://user:pass@localhost/dbname",
+            table_name="validator_keys",
+        )
         assert db.has_column("client_cluster_id") is True
 
         first, second = mock_cursor.execute.call_args_list
@@ -250,8 +262,9 @@ class TestHasColumn:
         self._wire(mock_get_conn, mock_cursor)
         mock_cursor.fetchone.side_effect = [(None,)]
 
-        db = Database(db_url="postgresql://user:pass@localhost/dbname",
-                      table_name="ghost_table")
+        db = Database(
+            db_url="postgresql://user:pass@localhost/dbname", table_name="ghost_table"
+        )
         with pytest.raises(ValueError, match="could not be resolved"):
             db.has_column("client_cluster_id")
 
@@ -262,16 +275,24 @@ class TestFetchKeysClusterFilter:
     @staticmethod
     def _wire(mock_get_conn, mock_cursor):
         mock_cursor.fetchall.return_value = []
-        mock_get_conn.return_value.__enter__ = MagicMock(return_value=mock_get_conn.return_value)
+        mock_get_conn.return_value.__enter__ = MagicMock(
+            return_value=mock_get_conn.return_value
+        )
         mock_get_conn.return_value.__exit__ = MagicMock(return_value=False)
-        mock_get_conn.return_value.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
-        mock_get_conn.return_value.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_get_conn.return_value.cursor.return_value.__enter__ = MagicMock(
+            return_value=mock_cursor
+        )
+        mock_get_conn.return_value.cursor.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
 
     @patch("database._get_db_connection")
     def test_applies_predicate_and_binds_parameter(self, mock_get_conn, mock_cursor):
         self._wire(mock_get_conn, mock_cursor)
-        db = Database(db_url="postgresql://user:pass@localhost/dbname",
-                      table_name="validator_keys")
+        db = Database(
+            db_url="postgresql://user:pass@localhost/dbname",
+            table_name="validator_keys",
+        )
         db.fetch_keys(client_cluster_id="cluster-apne2-1")
 
         executed_sql = str(mock_cursor.execute.call_args[0][0]).lower()
