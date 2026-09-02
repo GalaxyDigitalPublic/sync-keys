@@ -6,7 +6,7 @@ import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import execute_values
 
-from typings import DatabaseKeyRecord
+from typings import DatabaseKeyRecord, Web3SignerKeyRecord
 
 
 class Database:
@@ -88,22 +88,77 @@ class Database:
                 rows = cur.fetchall()
                 return [(row[0], row[1]) for row in rows]
 
-    def fetch_keys(self) -> List[DatabaseKeyRecord]:
+    def has_column(self, column_name: str) -> bool:
+        """Whether the configured table has the named column.
+
+        Used to fail closed: a table carrying client_cluster_id holds more than one
+        cluster's keys, so reading it without a predicate must be a deliberate choice.
+        """
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    sql.SQL("SELECT * FROM {table}").format(
-                        table=sql.Identifier(self.table_name)
+                # to_regclass resolves the name through search_path exactly as the SELECT in
+                # fetch_keys will, so this inspects the same table the query hits. Matching on
+                # information_schema.table_name alone would match a same-named table in any
+                # schema and could answer for the wrong one.
+                cur.execute("SELECT to_regclass(%s)::oid", (self.table_name,))
+                relation = cur.fetchone()[0]  # oid, resolved via search_path
+                if relation is None:
+                    # Never fall through to an unfiltered read because detection failed.
+                    raise ValueError(
+                        f"Table {self.table_name!r} could not be resolved on the current "
+                        "search_path, so its columns are unknown."
                     )
+                cur.execute(
+                    "SELECT 1 FROM pg_attribute "
+                    "WHERE attrelid = %s AND attname = %s AND attnum > 0 AND NOT attisdropped",
+                    (relation, column_name),
                 )
+                return cur.fetchone() is not None
+
+    def fetch_keys(self, client_cluster_id: Optional[str] = None) -> List[Web3SignerKeyRecord]:
+        """Fetch the encrypted keystores web3signer needs.
+
+        Only public_key, private_key and nonce are selected. SELECT * was previously mapped
+        by ordinal, which silently mis-assigned columns when pointed at a table with a
+        different shape: the key operation service's validator_keys holds
+        (public_key, private_key, nonce, bulk_key_gen_id, batch_id, client_cluster_id), so
+        ordinals 3 and 4 are not validator_index and fee_recipient. Naming the three columns
+        this command actually uses works against both table shapes.
+
+        client_cluster_id filters to a single cluster. Without it every web3signer sharing a
+        database loads every cluster's private keys. It is optional because the legacy
+        agent-managed table has no such column.
+        """
+        if client_cluster_id is not None and not client_cluster_id.strip():
+            # An empty string previously fell through the truthiness check and returned every
+            # cluster's keys -- the exact failure the predicate exists to prevent.
+            raise ValueError(
+                "client_cluster_id was empty. Pass a cluster id, or omit the argument entirely "
+                "to read a table that has no client_cluster_id column."
+            )
+
+        with _get_db_connection(self.db_url) as conn:
+            with conn.cursor() as cur:
+                if client_cluster_id is not None:
+                    cur.execute(
+                        sql.SQL(
+                            "SELECT public_key, private_key, nonce FROM {table} "
+                            "WHERE client_cluster_id = %s"
+                        ).format(table=sql.Identifier(self.table_name)),
+                        (client_cluster_id,),
+                    )
+                else:
+                    cur.execute(
+                        sql.SQL("SELECT public_key, private_key, nonce FROM {table}").format(
+                            table=sql.Identifier(self.table_name)
+                        )
+                    )
                 rows = cur.fetchall()
                 return [
-                    DatabaseKeyRecord(
+                    Web3SignerKeyRecord(
                         public_key=row[0],
                         private_key=row[1],
                         nonce=row[2],
-                        validator_index=row[3],
-                        fee_recipient=row[4],
                     )
                     for row in rows
                 ]
