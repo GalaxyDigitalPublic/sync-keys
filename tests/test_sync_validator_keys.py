@@ -20,7 +20,7 @@ class TestGenerateLighthouseConfig:
     def test_valid_fee_recipient_is_used(self):
         """When fee_recipient is a valid address, it should be used directly."""
         fee_recipient = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        keys = [("0xpubkey1", fee_recipient)]
+        keys: list[tuple[str, str | None]] = [("0xpubkey1", fee_recipient)]
 
         result = yaml.safe_load(
             _generate_lighthouse_config(keys, WEB3SIGNER_URL, DEFAULT_RECIPIENT)
@@ -30,7 +30,7 @@ class TestGenerateLighthouseConfig:
 
     def test_none_fee_recipient_falls_back_to_default(self):
         """When fee_recipient is None, the default should be used."""
-        keys = [("0xpubkey1", None)]
+        keys: list[tuple[str, str | None]] = [("0xpubkey1", None)]
 
         result = yaml.safe_load(
             _generate_lighthouse_config(keys, WEB3SIGNER_URL, DEFAULT_RECIPIENT)
@@ -40,7 +40,7 @@ class TestGenerateLighthouseConfig:
 
     def test_empty_string_fee_recipient_falls_back_to_default(self):
         """When fee_recipient is empty string, the default should be used."""
-        keys = [("0xpubkey1", "")]
+        keys: list[tuple[str, str | None]] = [("0xpubkey1", "")]
 
         result = yaml.safe_load(
             _generate_lighthouse_config(keys, WEB3SIGNER_URL, DEFAULT_RECIPIENT)
@@ -51,7 +51,7 @@ class TestGenerateLighthouseConfig:
     def test_mixed_fee_recipients(self):
         """Keys with valid, None, and empty fee recipients should be handled correctly."""
         valid_recipient = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-        keys = [
+        keys: list[tuple[str, str | None]] = [
             ("0xpubkey1", valid_recipient),
             ("0xpubkey2", None),
             ("0xpubkey3", ""),
@@ -67,7 +67,7 @@ class TestGenerateLighthouseConfig:
 
     def test_config_structure(self):
         """Generated config should have the correct Lighthouse structure."""
-        keys = [("0xpubkey1", None)]
+        keys: list[tuple[str, str | None]] = [("0xpubkey1", None)]
 
         result = yaml.safe_load(
             _generate_lighthouse_config(keys, WEB3SIGNER_URL, DEFAULT_RECIPIENT)
@@ -91,7 +91,7 @@ class TestGenerateLighthouseConfig:
 class TestGenerateSignerKeysConfig:
     def test_extracts_public_keys_from_tuples(self):
         """Should extract only public keys from (pubkey, fee_recipient) tuples."""
-        keys = [
+        keys: list[tuple[str, str | None]] = [
             ("0xpubkey1", "0xfee1"),
             ("0xpubkey2", None),
             ("0xpubkey3", ""),
@@ -108,7 +108,7 @@ class TestGenerateSignerKeysConfig:
 
     def test_format(self):
         """Output should be valid Teku/Prysm signer keys format."""
-        keys = [("0xpubkey1", None)]
+        keys: list[tuple[str, str | None]] = [("0xpubkey1", None)]
 
         result = _generate_signer_keys_config(keys, DEFAULT_RECIPIENT)
 
