@@ -1,5 +1,6 @@
 import glob
 import os
+import re
 from os import mkdir
 from os.path import exists
 from typing import List
@@ -14,6 +15,24 @@ from utils import is_lists_equal
 from validators import validate_db_uri, validate_env_name
 
 DECRYPTION_KEY_ENV = "DECRYPTION_KEY"
+
+# Only filenames this command generates are eligible for pruning.
+_GENERATED_KEYSTORE_RE = re.compile(r"key_\d+\.yaml")
+
+
+def _validate_cluster_ids(ctx, param, value):
+    """Reject empty or whitespace cluster ids.
+
+    With a repeatable option an empty value arrives as ("",), which is truthy, so it would
+    otherwise satisfy the "a cluster was named" check and disable scoping -- the exact failure
+    the option exists to prevent.
+    """
+    if value is None:
+        return ()
+    cleaned = tuple(v.strip() for v in value)
+    if any(not v for v in cleaned):
+        raise click.BadParameter("cluster id must not be empty", ctx=ctx, param=param)
+    return cleaned
 
 
 @click.command(help="Synchronizes web3signer private keys from the database")
@@ -41,8 +60,45 @@ DECRYPTION_KEY_ENV = "DECRYPTION_KEY"
     default="keys",
     show_default=True,
 )
+@click.option(
+    "--client-cluster-id",
+    "client_cluster_ids",
+    multiple=True,
+    callback=_validate_cluster_ids,
+    help=(
+        "Restrict keys to this cluster. Repeat the option for a signer that serves more than "
+        "one cluster. Required when the table carries a client_cluster_id column, otherwise "
+        "every web3signer sharing the database loads every cluster's private keys. Naming the "
+        "clusters explicitly is preferable to --all-clusters, because a cluster added to the "
+        "database later is then not picked up silently."
+    ),
+)
+@click.option(
+    "--all-clusters",
+    is_flag=True,
+    default=False,
+    help=(
+        "Deliberately load every cluster's keys from a cluster-scoped table. Only correct "
+        "when one web3signer really does serve every cluster in that table."
+    ),
+)
+@click.option(
+    "--allow-no-keys",
+    is_flag=True,
+    default=False,
+    help=(
+        "Start with an empty keystore when the query returns no rows, instead of failing. "
+        "For a signer that is deployed but not yet serving any validators."
+    ),
+)
 def sync_web3signer_keys(
-    db_url: str, output_dir: str, decryption_key_env: str, table_name: str
+    db_url: str,
+    output_dir: str,
+    decryption_key_env: str,
+    table_name: str,
+    client_cluster_ids: tuple = (),
+    all_clusters: bool = False,
+    allow_no_keys: bool = False,
 ) -> None:
     """
     The command is running by the init container in web3signer pods.
@@ -51,7 +107,54 @@ def sync_web3signer_keys(
     check_db_connection(db_url)
 
     database = Database(db_url=db_url, table_name=table_name)
-    keys_records = database.fetch_keys()
+
+    if client_cluster_ids and all_clusters:
+        raise click.ClickException(
+            "--client-cluster-id and --all-clusters are mutually exclusive."
+        )
+
+    if (
+        not client_cluster_ids
+        and not all_clusters
+        and database.has_column("client_cluster_id")
+    ):
+        # Fail closed. This table holds more than one cluster's keys, and forgetting the
+        # predicate hands this signer private keys belonging to other clusters.
+        raise click.ClickException(
+            f"Table '{table_name}' has a client_cluster_id column, so it may hold several "
+            "clusters' keys. Pass --client-cluster-id <id>, or --all-clusters to override."
+        )
+
+    keys_records = database.fetch_keys(client_cluster_ids=client_cluster_ids or None)
+
+    if not keys_records and allow_no_keys:
+        # An idle signer legitimately has no keys. Leave the directory alone and let
+        # web3signer start empty, which is what it does today for such a deployment.
+        click.secho(
+            f"No keys found in '{table_name}'; starting with an empty keystore.\n",
+            bold=True,
+            fg="yellow",
+        )
+        return
+
+    if not keys_records:
+        # Refuse rather than reconcile to nothing. Pruning to an empty directory would leave
+        # web3signer with no keys to sign with, which for an already-serving signer means
+        # silently stopping attestation. A zero-row result almost always means a wrong
+        # cluster id or an unpopulated table, so fail and let the init container block
+        # startup instead. The keystore is a tmpfs emptyDir, so it is empty on every pod
+        # start and cannot be used to tell "idle signer" from "wrong cluster id" -- hence
+        # --allow-no-keys rather than an inference from the directory contents.
+        raise click.ClickException(
+            f"No keys found in '{table_name}'"
+            + (
+                f" for cluster(s) {', '.join(client_cluster_ids)}"
+                if client_cluster_ids
+                else ""
+            )
+            + ". Refusing to reconcile the keystore directory to empty. Pass "
+            "--allow-no-keys if this signer is expected to have none."
+        )
 
     # decrypt private keys
     decryption_key = os.environ[decryption_key_env]
@@ -85,6 +188,23 @@ def sync_web3signer_keys(
         filename = f"key_{index}.yaml"
         with open(os.path.join(output_dir, filename), "w") as f:
             f.write(_generate_key_file(private_key))
+
+    # Remove keystores left behind by a previous, larger key set. web3signer loads every
+    # *.yaml in this directory, so without this a run that returns fewer keys than the last
+    # one keeps serving the surplus -- which silently defeats --client-cluster-id on an
+    # already-deployed signer. Written first, then pruned, so the generated set is never
+    # momentarily absent.
+    #
+    # Only files this command generates are considered. Anything else in the directory is
+    # left alone: deleting an unrecognised file would be destructive well beyond this
+    # command's remit.
+    keep = {f"key_{i}.yaml" for i in range(len(private_keys))}
+    for filename in glob.glob(os.path.join(output_dir, "*.yaml")):
+        basename = os.path.basename(filename)
+        if not _GENERATED_KEYSTORE_RE.fullmatch(basename) or basename in keep:
+            continue
+        os.remove(filename)
+        click.secho(f"Removed stale keystore {basename}.", fg="yellow")
 
     click.secho(
         f"Web3Signer now uses {len(private_keys)} private keys.\n",
