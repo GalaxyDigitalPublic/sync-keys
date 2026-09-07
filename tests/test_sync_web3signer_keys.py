@@ -23,10 +23,17 @@ def _record(public_key: str, private_key: str) -> dict:
     return {"public_key": public_key, "private_key": private_key, "nonce": "bm9uY2U="}
 
 
-def _invoke(output_dir, extra_args, *, has_column=True, rows=None):
-    """Run the command with Database and Decoder mocked, returning the click result."""
+def _invoke(output_dir, extra_args, *, has_column=True, rows=None, total_rows=None):
+    """Run the command with Database and Decoder mocked, returning the click result.
+
+    total_rows is what the table holds ignoring any cluster predicate. It defaults to the
+    number of rows the filtered read returned, which is the consistent case; pass it
+    explicitly to describe a table that holds other clusters' keys.
+    """
     if rows is None:
         rows = [_record("0xaaa", "111"), _record("0xbbb", "222")]
+    if total_rows is None:
+        total_rows = len(rows)
 
     with (
         patch("sync_web3signer_keys.check_db_connection"),
@@ -36,6 +43,7 @@ def _invoke(output_dir, extra_args, *, has_column=True, rows=None):
         db = db_cls.return_value
         db.has_column.return_value = has_column
         db.fetch_keys.return_value = rows
+        db.count_all_keys.return_value = total_rows
         # the encrypted value stands in for its own plaintext, which is a decimal string
         decoder_cls.return_value.decrypt.side_effect = lambda data, nonce: data
 
@@ -154,24 +162,46 @@ class TestKeystoreReconciliation:
         assert "web3signer-config.yaml" in survivors
         assert "key_9.yaml" not in survivors
 
-    def test_zero_rows_fails_and_leaves_the_directory_untouched(self, tmp_path):
-        """Reconciling to empty would stop an already-serving signer from signing."""
+    def test_empty_table_starts_empty_with_no_flag(self, tmp_path):
+        """Nothing provisioned anywhere yet is legitimate and must not need a flag.
+
+        QA's euw1/hoodi-2 is this case: zero rows in its keystore table with web3signer
+        running 3/3 ready. Requiring an operator to declare it would mean the guard is
+        either a tripwire or permanently disabled for that namespace.
+        """
+        result, db = _invoke(
+            tmp_path,
+            ["--table-name", "validator_keys", "--client-cluster-id", "c1"],
+            rows=[],
+            total_rows=0,
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "empty keystore" in result.output
+        assert _keystores(tmp_path) == set()
+        db.count_all_keys.assert_called_once()
+
+    def test_populated_table_with_no_match_fails(self, tmp_path):
+        """The table holds keys, just not for this cluster -- a wrong cluster id or a
+        keystore URL pointing at another namespace. Reconciling to empty here would stop a
+        signer that is supposed to be signing."""
         (tmp_path / "key_0.yaml").write_text("privateKey: '0xexisting'\n")
 
         result, _ = _invoke(
             tmp_path,
-            ["--table-name", "validator_keys", "--client-cluster-id", "c1"],
+            ["--table-name", "validator_keys", "--client-cluster-id", "wrong-id"],
             rows=[],
+            total_rows=5000,
         )
 
         assert result.exit_code != 0
-        assert "No keys found" in result.output
+        assert "holds 5000 row(s)" in result.output
+        assert "wrong-id" in result.output
         assert _keystores(tmp_path) == {"key_0.yaml"}
 
-    def test_allow_no_keys_starts_empty(self, tmp_path):
-        """A signer that is deployed but serves no validators must still start. QA's
-        euw1/hoodi-2 runs 3/3 ready with zero rows in its keystore table, so failing
-        unconditionally on zero rows would stop it from starting at all."""
+    def test_populated_table_with_no_match_can_be_forced(self, tmp_path):
+        """The escape hatch, for a signer that genuinely serves none of a populated table's
+        clusters. Narrow enough that it is not routine configuration."""
         result, _ = _invoke(
             tmp_path,
             [
@@ -182,22 +212,11 @@ class TestKeystoreReconciliation:
                 "--allow-no-keys",
             ],
             rows=[],
+            total_rows=5000,
         )
 
         assert result.exit_code == 0, result.output
         assert "empty keystore" in result.output
-        assert _keystores(tmp_path) == set()
-
-    def test_zero_rows_names_the_opt_out(self, tmp_path):
-        """The failure has to tell the operator how a legitimately empty signer proceeds."""
-        result, _ = _invoke(
-            tmp_path,
-            ["--table-name", "validator_keys", "--client-cluster-id", "c1"],
-            rows=[],
-        )
-
-        assert result.exit_code != 0
-        assert "--allow-no-keys" in result.output
 
     def test_writes_one_keystore_per_key(self, tmp_path):
         result, _ = _invoke(

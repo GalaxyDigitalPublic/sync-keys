@@ -87,8 +87,9 @@ def _validate_cluster_ids(ctx, param, value):
     is_flag=True,
     default=False,
     help=(
-        "Start with an empty keystore when the query returns no rows, instead of failing. "
-        "For a signer that is deployed but not yet serving any validators."
+        "Start with an empty keystore even when the table holds keys for other clusters. "
+        "Rarely needed: an entirely empty table is already tolerated without this. Use it "
+        "only for a signer that genuinely serves none of the clusters in a populated table."
     ),
 )
 def sync_web3signer_keys(
@@ -127,34 +128,38 @@ def sync_web3signer_keys(
 
     keys_records = database.fetch_keys(client_cluster_ids=client_cluster_ids or None)
 
-    if not keys_records and allow_no_keys:
-        # An idle signer legitimately has no keys. Leave the directory alone and let
-        # web3signer start empty, which is what it does today for such a deployment.
+    if not keys_records:
+        # Distinguish the two ways a read comes back empty, rather than asking an operator to
+        # declare which one it is with a flag. A flag has to be toggled in lockstep with the
+        # signer's lifecycle: left on it permanently disables this guard for that namespace,
+        # and removed at the wrong moment it stops the pod from starting.
+        #
+        #   table empty        -> nothing is provisioned anywhere yet. Starting with an empty
+        #                         keystore is correct, and is what web3signer already does.
+        #   table has rows,    -> this database holds keys, just none for the cluster asked
+        #   none for my cluster   for. Almost always a wrong cluster id or a keystore URL
+        #                         pointing at another namespace, so refuse: reconciling to
+        #                         empty would silently stop a signer that should be signing.
+        #
+        # The keystore directory cannot make this distinction, because it is a tmpfs emptyDir
+        # and so is empty on every pod start either way.
+        total = database.count_all_keys()
+
+        if total and not allow_no_keys:
+            raise click.ClickException(
+                f"Table '{table_name}' holds {total} row(s), but none for cluster(s) "
+                f"{', '.join(client_cluster_ids) if client_cluster_ids else '<unscoped>'}. "
+                "Refusing to reconcile the keystore directory to empty, which would stop "
+                "this signer from signing. Check --client-cluster-id and the keystore URL. "
+                "Pass --allow-no-keys only if this signer genuinely serves none of them."
+            )
+
         click.secho(
             f"No keys found in '{table_name}'; starting with an empty keystore.\n",
             bold=True,
             fg="yellow",
         )
         return
-
-    if not keys_records:
-        # Refuse rather than reconcile to nothing. Pruning to an empty directory would leave
-        # web3signer with no keys to sign with, which for an already-serving signer means
-        # silently stopping attestation. A zero-row result almost always means a wrong
-        # cluster id or an unpopulated table, so fail and let the init container block
-        # startup instead. The keystore is a tmpfs emptyDir, so it is empty on every pod
-        # start and cannot be used to tell "idle signer" from "wrong cluster id" -- hence
-        # --allow-no-keys rather than an inference from the directory contents.
-        raise click.ClickException(
-            f"No keys found in '{table_name}'"
-            + (
-                f" for cluster(s) {', '.join(client_cluster_ids)}"
-                if client_cluster_ids
-                else ""
-            )
-            + ". Refusing to reconcile the keystore directory to empty. Pass "
-            "--allow-no-keys if this signer is expected to have none."
-        )
 
     # decrypt private keys
     decryption_key = os.environ[decryption_key_env]
