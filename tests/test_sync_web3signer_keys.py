@@ -168,6 +168,37 @@ class TestKeystoreReconciliation:
         assert "No keys found" in result.output
         assert _keystores(tmp_path) == {"key_0.yaml"}
 
+    def test_allow_no_keys_starts_empty(self, tmp_path):
+        """A signer that is deployed but serves no validators must still start. QA's
+        euw1/hoodi-2 runs 3/3 ready with zero rows in its keystore table, so failing
+        unconditionally on zero rows would stop it from starting at all."""
+        result, _ = _invoke(
+            tmp_path,
+            [
+                "--table-name",
+                "validator_keys",
+                "--client-cluster-id",
+                "c1",
+                "--allow-no-keys",
+            ],
+            rows=[],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "empty keystore" in result.output
+        assert _keystores(tmp_path) == set()
+
+    def test_zero_rows_names_the_opt_out(self, tmp_path):
+        """The failure has to tell the operator how a legitimately empty signer proceeds."""
+        result, _ = _invoke(
+            tmp_path,
+            ["--table-name", "validator_keys", "--client-cluster-id", "c1"],
+            rows=[],
+        )
+
+        assert result.exit_code != 0
+        assert "--allow-no-keys" in result.output
+
     def test_writes_one_keystore_per_key(self, tmp_path):
         result, _ = _invoke(
             tmp_path,

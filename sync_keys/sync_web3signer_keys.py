@@ -82,6 +82,15 @@ def _validate_cluster_ids(ctx, param, value):
         "when one web3signer really does serve every cluster in that table."
     ),
 )
+@click.option(
+    "--allow-no-keys",
+    is_flag=True,
+    default=False,
+    help=(
+        "Start with an empty keystore when the query returns no rows, instead of failing. "
+        "For a signer that is deployed but not yet serving any validators."
+    ),
+)
 def sync_web3signer_keys(
     db_url: str,
     output_dir: str,
@@ -89,6 +98,7 @@ def sync_web3signer_keys(
     table_name: str,
     client_cluster_ids: tuple = (),
     all_clusters: bool = False,
+    allow_no_keys: bool = False,
 ) -> None:
     """
     The command is running by the init container in web3signer pods.
@@ -117,12 +127,24 @@ def sync_web3signer_keys(
 
     keys_records = database.fetch_keys(client_cluster_ids=client_cluster_ids or None)
 
+    if not keys_records and allow_no_keys:
+        # An idle signer legitimately has no keys. Leave the directory alone and let
+        # web3signer start empty, which is what it does today for such a deployment.
+        click.secho(
+            f"No keys found in '{table_name}'; starting with an empty keystore.\n",
+            bold=True,
+            fg="yellow",
+        )
+        return
+
     if not keys_records:
         # Refuse rather than reconcile to nothing. Pruning to an empty directory would leave
         # web3signer with no keys to sign with, which for an already-serving signer means
         # silently stopping attestation. A zero-row result almost always means a wrong
         # cluster id or an unpopulated table, so fail and let the init container block
-        # startup instead.
+        # startup instead. The keystore is a tmpfs emptyDir, so it is empty on every pod
+        # start and cannot be used to tell "idle signer" from "wrong cluster id" -- hence
+        # --allow-no-keys rather than an inference from the directory contents.
         raise click.ClickException(
             f"No keys found in '{table_name}'"
             + (
@@ -130,7 +152,8 @@ def sync_web3signer_keys(
                 if client_cluster_ids
                 else ""
             )
-            + ". Refusing to reconcile the keystore directory to empty."
+            + ". Refusing to reconcile the keystore directory to empty. Pass "
+            "--allow-no-keys if this signer is expected to have none."
         )
 
     # decrypt private keys
