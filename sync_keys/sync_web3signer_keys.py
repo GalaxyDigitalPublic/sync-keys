@@ -82,16 +82,6 @@ def _validate_cluster_ids(ctx, param, value):
         "when one web3signer really does serve every cluster in that table."
     ),
 )
-@click.option(
-    "--allow-no-keys",
-    is_flag=True,
-    default=False,
-    help=(
-        "Start with an empty keystore even when the table holds keys for other clusters. "
-        "Rarely needed: an entirely empty table is already tolerated without this. Use it "
-        "only for a signer that genuinely serves none of the clusters in a populated table."
-    ),
-)
 def sync_web3signer_keys(
     db_url: str,
     output_dir: str,
@@ -99,7 +89,6 @@ def sync_web3signer_keys(
     table_name: str,
     client_cluster_ids: tuple = (),
     all_clusters: bool = False,
-    allow_no_keys: bool = False,
 ) -> None:
     """
     The command is running by the init container in web3signer pods.
@@ -129,10 +118,12 @@ def sync_web3signer_keys(
     keys_records = database.fetch_keys(client_cluster_ids=client_cluster_ids or None)
 
     if not keys_records:
-        # Distinguish the two ways a read comes back empty, rather than asking an operator to
-        # declare which one it is with a flag. A flag has to be toggled in lockstep with the
-        # signer's lifecycle: left on it permanently disables this guard for that namespace,
-        # and removed at the wrong moment it stops the pod from starting.
+        # Distinguish the two ways a read comes back empty. There is deliberately no flag to
+        # override this: a flag would have to be toggled in lockstep with the signer's
+        # lifecycle, and left on it would permanently disable the guard for that namespace.
+        # Under one KOS database per namespace the refusal below is unreachable for a
+        # correctly configured signer anyway -- it can only fire when the cluster id or the
+        # keystore URL is wrong, which is not a condition to wave through.
         #
         #   table empty        -> nothing is provisioned anywhere yet. Starting with an empty
         #                         keystore is correct, and is what web3signer already does.
@@ -145,13 +136,12 @@ def sync_web3signer_keys(
         # and so is empty on every pod start either way.
         total = database.count_all_keys()
 
-        if total and not allow_no_keys:
+        if total:
             raise click.ClickException(
                 f"Table '{table_name}' holds {total} row(s), but none for cluster(s) "
                 f"{', '.join(client_cluster_ids) if client_cluster_ids else '<unscoped>'}. "
                 "Refusing to reconcile the keystore directory to empty, which would stop "
-                "this signer from signing. Check --client-cluster-id and the keystore URL. "
-                "Pass --allow-no-keys only if this signer genuinely serves none of them."
+                "this signer from signing. Check --client-cluster-id and the keystore URL."
             )
 
         click.secho(

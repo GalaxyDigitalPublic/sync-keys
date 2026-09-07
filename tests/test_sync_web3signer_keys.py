@@ -199,9 +199,10 @@ class TestKeystoreReconciliation:
         assert "wrong-id" in result.output
         assert _keystores(tmp_path) == {"key_0.yaml"}
 
-    def test_populated_table_with_no_match_can_be_forced(self, tmp_path):
-        """The escape hatch, for a signer that genuinely serves none of a populated table's
-        clusters. Narrow enough that it is not routine configuration."""
+    def test_the_refusal_cannot_be_overridden(self, tmp_path):
+        """There is deliberately no flag to wave the refusal through. One would have to be
+        toggled in lockstep with the signer's lifecycle, and left on it would disable the
+        guard for that namespace permanently."""
         result, _ = _invoke(
             tmp_path,
             [
@@ -215,8 +216,8 @@ class TestKeystoreReconciliation:
             total_rows=5000,
         )
 
-        assert result.exit_code == 0, result.output
-        assert "empty keystore" in result.output
+        assert result.exit_code != 0
+        assert "no such option" in result.output.lower()
 
     def test_writes_one_keystore_per_key(self, tmp_path):
         result, _ = _invoke(
