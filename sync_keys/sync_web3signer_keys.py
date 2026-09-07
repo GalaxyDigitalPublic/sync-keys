@@ -3,7 +3,7 @@ import os
 import re
 from os import mkdir
 from os.path import exists
-from typing import List, Optional
+from typing import List
 
 import click
 import yaml
@@ -18,6 +18,21 @@ DECRYPTION_KEY_ENV = "DECRYPTION_KEY"
 
 # Only filenames this command generates are eligible for pruning.
 _GENERATED_KEYSTORE_RE = re.compile(r"key_\d+\.yaml")
+
+
+def _validate_cluster_ids(ctx, param, value):
+    """Reject empty or whitespace cluster ids.
+
+    With a repeatable option an empty value arrives as ("",), which is truthy, so it would
+    otherwise satisfy the "a cluster was named" check and disable scoping -- the exact failure
+    the option exists to prevent.
+    """
+    if value is None:
+        return ()
+    cleaned = tuple(v.strip() for v in value)
+    if any(not v for v in cleaned):
+        raise click.BadParameter("cluster id must not be empty", ctx=ctx, param=param)
+    return cleaned
 
 
 @click.command(help="Synchronizes web3signer private keys from the database")
@@ -47,12 +62,16 @@ _GENERATED_KEYSTORE_RE = re.compile(r"key_\d+\.yaml")
 )
 @click.option(
     "--client-cluster-id",
+    "client_cluster_ids",
+    multiple=True,
+    callback=_validate_cluster_ids,
     help=(
-        "Restrict keys to a single cluster. Required when the table carries a "
-        "client_cluster_id column, otherwise every web3signer sharing the database loads "
-        "every cluster's private keys."
+        "Restrict keys to this cluster. Repeat the option for a signer that serves more than "
+        "one cluster. Required when the table carries a client_cluster_id column, otherwise "
+        "every web3signer sharing the database loads every cluster's private keys. Naming the "
+        "clusters explicitly is preferable to --all-clusters, because a cluster added to the "
+        "database later is then not picked up silently."
     ),
-    default=None,
 )
 @click.option(
     "--all-clusters",
@@ -68,7 +87,7 @@ def sync_web3signer_keys(
     output_dir: str,
     decryption_key_env: str,
     table_name: str,
-    client_cluster_id: Optional[str] = None,
+    client_cluster_ids: tuple = (),
     all_clusters: bool = False,
 ) -> None:
     """
@@ -79,13 +98,13 @@ def sync_web3signer_keys(
 
     database = Database(db_url=db_url, table_name=table_name)
 
-    if client_cluster_id and all_clusters:
+    if client_cluster_ids and all_clusters:
         raise click.ClickException(
             "--client-cluster-id and --all-clusters are mutually exclusive."
         )
 
     if (
-        not client_cluster_id
+        not client_cluster_ids
         and not all_clusters
         and database.has_column("client_cluster_id")
     ):
@@ -96,7 +115,7 @@ def sync_web3signer_keys(
             "clusters' keys. Pass --client-cluster-id <id>, or --all-clusters to override."
         )
 
-    keys_records = database.fetch_keys(client_cluster_id=client_cluster_id)
+    keys_records = database.fetch_keys(client_cluster_ids=client_cluster_ids or None)
 
     if not keys_records:
         # Refuse rather than reconcile to nothing. Pruning to an empty directory would leave
@@ -106,7 +125,11 @@ def sync_web3signer_keys(
         # startup instead.
         raise click.ClickException(
             f"No keys found in '{table_name}'"
-            + (f" for cluster '{client_cluster_id}'" if client_cluster_id else "")
+            + (
+                f" for cluster(s) {', '.join(client_cluster_ids)}"
+                if client_cluster_ids
+                else ""
+            )
             + ". Refusing to reconcile the keystore directory to empty."
         )
 

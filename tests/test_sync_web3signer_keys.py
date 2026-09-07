@@ -75,7 +75,7 @@ class TestClusterSafeguards:
         result, db = _invoke(tmp_path, [], has_column=False)
 
         assert result.exit_code == 0, result.output
-        db.fetch_keys.assert_called_once_with(client_cluster_id=None)
+        db.fetch_keys.assert_called_once_with(client_cluster_ids=None)
 
     def test_all_clusters_overrides_the_guard(self, tmp_path):
         result, db = _invoke(
@@ -83,7 +83,7 @@ class TestClusterSafeguards:
         )
 
         assert result.exit_code == 0, result.output
-        db.fetch_keys.assert_called_once_with(client_cluster_id=None)
+        db.fetch_keys.assert_called_once_with(client_cluster_ids=None)
 
     def test_empty_cluster_id_is_rejected(self, tmp_path):
         """An empty value must not read as "no cluster given" and disable scoping."""
@@ -94,6 +94,27 @@ class TestClusterSafeguards:
         assert result.exit_code != 0
         db.fetch_keys.assert_not_called()
 
+    def test_several_clusters_can_be_named(self, tmp_path):
+        """A signer that legitimately serves more than one cluster names each of them, rather
+        than reaching for --all-clusters, so a cluster added to the database later is not
+        picked up silently."""
+        result, db = _invoke(
+            tmp_path,
+            [
+                "--table-name",
+                "validator_keys",
+                "--client-cluster-id",
+                "us-hoodi-01",
+                "--client-cluster-id",
+                "qa-01",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        db.fetch_keys.assert_called_once_with(
+            client_cluster_ids=("us-hoodi-01", "qa-01")
+        )
+
     def test_named_cluster_is_passed_through(self, tmp_path):
         result, db = _invoke(
             tmp_path,
@@ -101,7 +122,7 @@ class TestClusterSafeguards:
         )
 
         assert result.exit_code == 0, result.output
-        db.fetch_keys.assert_called_once_with(client_cluster_id="cluster-1")
+        db.fetch_keys.assert_called_once_with(client_cluster_ids=("cluster-1",))
 
 
 class TestKeystoreReconciliation:

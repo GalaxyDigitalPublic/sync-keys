@@ -6,7 +6,10 @@ import yaml
 # Add sync_keys to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "sync_keys"))
 
-from sync_validator_keys import _generate_lighthouse_config, _generate_signer_keys_config
+from sync_validator_keys import (
+    _generate_lighthouse_config,
+    _generate_signer_keys_config,
+)
 
 
 DEFAULT_RECIPIENT = "0x1111111111111111111111111111111111111111"

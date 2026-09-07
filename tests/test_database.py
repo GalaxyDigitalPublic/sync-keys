@@ -194,6 +194,34 @@ class TestFetchPublicKeysByValidatorIndex:
         assert "null as fee_recipient" in select_query
 
 
+class TestFetchKeysSeveralClusters:
+    """One signer can serve several clusters, so the predicate takes a list."""
+
+    @patch("database._get_db_connection")
+    def test_binds_all_ids_in_one_predicate(self, mock_get_conn, mock_cursor):
+        mock_cursor.fetchall.return_value = []
+        mock_get_conn.return_value.__enter__ = MagicMock(
+            return_value=mock_get_conn.return_value
+        )
+        mock_get_conn.return_value.__exit__ = MagicMock(return_value=False)
+        mock_get_conn.return_value.cursor.return_value.__enter__ = MagicMock(
+            return_value=mock_cursor
+        )
+        mock_get_conn.return_value.cursor.return_value.__exit__ = MagicMock(
+            return_value=False
+        )
+
+        db = Database(
+            db_url="postgresql://user:pass@localhost/dbname",
+            table_name="validator_keys",
+        )
+        db.fetch_keys(client_cluster_ids=["a", "b"])
+
+        executed_sql = str(mock_cursor.execute.call_args[0][0]).lower()
+        assert "where client_cluster_id = any(%s)" in executed_sql
+        assert mock_cursor.execute.call_args[0][1] == (["a", "b"],)
+
+
 class TestFetchKeysEmptyClusterId:
     """An empty id previously fell through the truthiness check and returned every cluster."""
 
@@ -202,16 +230,16 @@ class TestFetchKeysEmptyClusterId:
             db_url="postgresql://user:pass@localhost/dbname",
             table_name="validator_keys",
         )
-        with pytest.raises(ValueError, match="client_cluster_id was empty"):
-            db.fetch_keys(client_cluster_id="")
+        with pytest.raises(ValueError, match="contained an empty value"):
+            db.fetch_keys(client_cluster_ids=[""])
 
     def test_whitespace_only_is_rejected(self):
         db = Database(
             db_url="postgresql://user:pass@localhost/dbname",
             table_name="validator_keys",
         )
-        with pytest.raises(ValueError, match="client_cluster_id was empty"):
-            db.fetch_keys(client_cluster_id="   ")
+        with pytest.raises(ValueError, match="contained an empty value"):
+            db.fetch_keys(client_cluster_ids=["   "])
 
 
 class TestHasColumn:
@@ -293,12 +321,12 @@ class TestFetchKeysClusterFilter:
             db_url="postgresql://user:pass@localhost/dbname",
             table_name="validator_keys",
         )
-        db.fetch_keys(client_cluster_id="cluster-apne2-1")
+        db.fetch_keys(client_cluster_ids=["cluster-apne2-1"])
 
         executed_sql = str(mock_cursor.execute.call_args[0][0]).lower()
-        assert "where client_cluster_id = %s" in executed_sql
+        assert "where client_cluster_id = any(%s)" in executed_sql
         # bound as a parameter, never interpolated
-        assert mock_cursor.execute.call_args[0][1] == ("cluster-apne2-1",)
+        assert mock_cursor.execute.call_args[0][1] == (["cluster-apne2-1"],)
 
     @patch("database._get_db_connection")
     def test_omits_predicate_when_no_cluster_given(self, mock_get_conn, mock_cursor):

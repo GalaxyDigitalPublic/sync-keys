@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional
+from typing import List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 import click
@@ -125,7 +125,7 @@ class Database:
                 return cur.fetchone() is not None
 
     def fetch_keys(
-        self, client_cluster_id: Optional[str] = None
+        self, client_cluster_ids: Optional[Sequence[str]] = None
     ) -> List[Web3SignerKeyRecord]:
         """Fetch the encrypted keystores web3signer needs.
 
@@ -136,27 +136,32 @@ class Database:
         ordinals 3 and 4 are not validator_index and fee_recipient. Naming the three columns
         this command actually uses works against both table shapes.
 
-        client_cluster_id filters to a single cluster. Without it every web3signer sharing a
-        database loads every cluster's private keys. It is optional because the legacy
-        agent-managed table has no such column.
+        client_cluster_ids restricts the read to the named clusters. Without it every
+        web3signer sharing a database loads every cluster's private keys. It is optional
+        because the legacy agent-managed table has no such column, and it accepts several ids
+        because one signer can legitimately serve more than one cluster -- naming them
+        explicitly means a cluster added to the database later is not picked up silently.
         """
-        if client_cluster_id is not None and not client_cluster_id.strip():
-            # An empty string previously fell through the truthiness check and returned every
-            # cluster's keys -- the exact failure the predicate exists to prevent.
-            raise ValueError(
-                "client_cluster_id was empty. Pass a cluster id, or omit the argument entirely "
-                "to read a table that has no client_cluster_id column."
-            )
+        if client_cluster_ids is not None:
+            ids = list(client_cluster_ids)
+            if not ids or any(not str(cid).strip() for cid in ids):
+                # An empty value previously fell through a truthiness check and returned every
+                # cluster's keys -- the exact failure the predicate exists to prevent.
+                raise ValueError(
+                    "client_cluster_ids contained an empty value. Pass one or more cluster ids, "
+                    "or omit the argument entirely to read a table that has no "
+                    "client_cluster_id column."
+                )
 
         with _get_db_connection(self.db_url) as conn:
             with conn.cursor() as cur:
-                if client_cluster_id is not None:
+                if client_cluster_ids is not None:
                     cur.execute(
                         sql.SQL(
                             "SELECT public_key, private_key, nonce FROM {table} "
-                            "WHERE client_cluster_id = %s"
+                            "WHERE client_cluster_id = ANY(%s)"
                         ).format(table=sql.Identifier(self.table_name)),
-                        (client_cluster_id,),
+                        (list(client_cluster_ids),),
                     )
                 else:
                     cur.execute(
