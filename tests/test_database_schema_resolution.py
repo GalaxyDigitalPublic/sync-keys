@@ -78,3 +78,68 @@ def test_unresolvable_table_aborts_rather_than_reporting_false(
     _pin_search_path(monkeypatch, "sk_a, sk_b")
     with pytest.raises(ValueError, match="could not be resolved"):
         Database(DSN, table_name="no_such_table").has_column("client_cluster_id")
+
+
+@pytest.fixture()
+def cluster_table():
+    """A cluster-scoped table holding two clusters' keys, like the key operation service's."""
+    conn = psycopg2.connect(DSN)
+    conn.autocommit = True
+    cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS sk_vk")
+    cur.execute(
+        "CREATE TABLE sk_vk (public_key TEXT, private_key TEXT, nonce TEXT, "
+        "bulk_key_gen_id INT, batch_id INT, client_cluster_id TEXT)"
+    )
+    cur.executemany(
+        "INSERT INTO sk_vk VALUES (%s,%s,%s,1,1,%s)",
+        [
+            ("0xa", "1", "n", "qa-01"),
+            ("0xb", "2", "n", "qa-01"),
+            ("0xc", "3", "n", "us-hoodi-01"),
+        ],
+    )
+    yield
+    cur.execute("DROP TABLE IF EXISTS sk_vk")
+    cur.close()
+    conn.close()
+
+
+def test_count_all_keys_ignores_the_cluster_predicate(cluster_table):
+    """count_all_keys is what separates "nothing provisioned" from "none for my cluster",
+    so it must count the whole table even when a predicate would match nothing."""
+    db = Database(db_url=DSN, table_name="sk_vk")
+
+    assert db.count_all_keys() == 3
+    assert db.fetch_keys(client_cluster_ids=["nope"]) == []
+    # the distinction the guard relies on: filtered empty, table not
+    assert db.count_all_keys() > 0
+
+
+def test_count_all_keys_is_zero_for_an_unprovisioned_table(cluster_table):
+    conn = psycopg2.connect(DSN)
+    conn.autocommit = True
+    conn.cursor().execute("TRUNCATE sk_vk")
+    conn.close()
+
+    db = Database(db_url=DSN, table_name="sk_vk")
+
+    assert db.count_all_keys() == 0
+    assert db.fetch_keys(client_cluster_ids=["qa-01"]) == []
+
+
+def test_legacy_table_count_matches_unfiltered_read(two_schemas, monkeypatch):
+    """On the legacy table filtered and unfiltered are the same read, so zero rows can only
+    mean an empty table -- which is why no flag is needed there."""
+    _pin_search_path(monkeypatch, "sk_b, public")
+    conn = psycopg2.connect(DSN)
+    conn.autocommit = True
+    cur = conn.cursor()
+    cur.execute("INSERT INTO sk_b.shared VALUES ('0xa','1','n')")
+    conn.close()
+
+    db = Database(db_url=DSN, table_name="shared")
+
+    assert db.has_column("client_cluster_id") is False
+    assert db.count_all_keys() == 1
+    assert len(db.fetch_keys()) == 1

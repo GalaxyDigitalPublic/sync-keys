@@ -179,6 +179,27 @@ class Database:
                     for row in rows
                 ]
 
+    def count_all_keys(self) -> int:
+        """Count every row in the table, ignoring any cluster predicate.
+
+        This is what tells "nothing has been provisioned yet" apart from "this table holds
+        keys, but none matched my cluster". The first is legitimate for a signer that serves
+        no validators; the second almost always means a wrong cluster id or a keystore URL
+        pointing at another namespace's database, and starting empty in that case silently
+        stops a signer that is supposed to be signing.
+
+        The keystore directory cannot answer this: it is a tmpfs emptyDir, so it is empty on
+        every pod start regardless.
+        """
+        with _get_db_connection(self.db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL("SELECT count(*) FROM {table}").format(
+                        table=sql.Identifier(self.table_name)
+                    )
+                )
+                return int(cur.fetchone()[0])
+
 
 def check_db_connection(db_url):
     connection = _get_db_connection(db_url=db_url)
