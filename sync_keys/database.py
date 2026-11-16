@@ -217,13 +217,17 @@ DB_AUTH_ENV = "SYNC_KEYS_DB_AUTH"
 DB_AUTH_MODES = ("password", "aws-iam", "azure-ad")
 AZURE_POSTGRES_SCOPE = "https://ossrdbms-aad.database.windows.net/.default"
 # Token modes verify the server (a stolen token is a valid login for ~15 min): verify-full only, CA per cloud.
-RDS_CA_BUNDLE = "/etc/ssl/certs/rds-global-bundle.pem"  # baked into the image, see Dockerfile
+RDS_CA_BUNDLE = (
+    "/etc/ssl/certs/rds-global-bundle.pem"  # baked into the image, see Dockerfile
+)
 CA_FILE_ENV = "SYNC_KEYS_DB_CA_FILE"
 
 
 def _db_auth_mode() -> str:
     mode = os.environ.get(DB_AUTH_ENV, "password").strip().lower()
-    if mode not in DB_AUTH_MODES:  # fail closed: a typo must not fall back to a password
+    if (
+        mode not in DB_AUTH_MODES
+    ):  # fail closed: a typo must not fall back to a password
         raise ValueError(f"{DB_AUTH_ENV} must be one of {DB_AUTH_MODES}, got {mode!r}")
     return mode
 
@@ -235,7 +239,9 @@ def _token_password(mode: str, host: str, port: int, user: str) -> str:
 
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
         if not region:
-            raise ValueError("aws-iam database auth needs AWS_REGION (or AWS_DEFAULT_REGION)")
+            raise ValueError(
+                "aws-iam database auth needs AWS_REGION (or AWS_DEFAULT_REGION)"
+            )
         return boto3.client("rds", region_name=region).generate_db_auth_token(
             DBHostname=host, Port=port, DBUsername=user
         )
@@ -249,17 +255,32 @@ def _get_db_connection(db_url):
     from the pod's cloud identity (RDS IAM / Entra ID). Token modes refuse a password in the URL and plaintext."""
     result = urlparse(db_url)
     mode = _db_auth_mode()
-    params = {"database": result.path[1:], "user": result.username, "host": result.hostname, "port": result.port}
+    params = {
+        "database": result.path[1:],
+        "user": result.username,
+        "host": result.hostname,
+        "port": result.port,
+    }
     if mode == "password":  # unchanged behaviour
         return psycopg2.connect(password=result.password, **params)
     params.update({k: v[-1] for k, v in parse_qs(result.query).items()})
     if result.password:
-        raise ValueError(f"{DB_AUTH_ENV}={mode}: remove the password from the database URL")
+        raise ValueError(
+            f"{DB_AUTH_ENV}={mode}: remove the password from the database URL"
+        )
     if params.setdefault("sslmode", "verify-full") != "verify-full":
-        raise ValueError(f"{DB_AUTH_ENV}={mode} verifies the server: sslmode must be verify-full")
+        raise ValueError(
+            f"{DB_AUTH_ENV}={mode} verifies the server: sslmode must be verify-full"
+        )
     if "sslrootcert" not in params:
-        params["sslrootcert"] = os.environ.get(CA_FILE_ENV) or (RDS_CA_BUNDLE if mode == "aws-iam" else "system")
+        params["sslrootcert"] = os.environ.get(CA_FILE_ENV) or (
+            RDS_CA_BUNDLE if mode == "aws-iam" else "system"
+        )
     if params["sslrootcert"] != "system" and not os.path.isfile(params["sslrootcert"]):
-        raise ValueError(f"database CA bundle not found: {params['sslrootcert']} (set {CA_FILE_ENV})")
-    params["password"] = _token_password(mode, result.hostname, result.port or 5432, result.username)
+        raise ValueError(
+            f"database CA bundle not found: {params['sslrootcert']} (set {CA_FILE_ENV})"
+        )
+    params["password"] = _token_password(
+        mode, result.hostname, result.port or 5432, result.username
+    )
     return psycopg2.connect(**params)
