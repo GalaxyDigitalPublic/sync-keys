@@ -2,7 +2,22 @@ name: Docker
 
 on:
   release:
-    types: [published]
+    types: [published]  # releases published by a person
+  workflow_call:  # releases published by release.yaml (GITHUB_TOKEN releases don't fire the release event)
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:  # rebuild an existing release
+    inputs:
+      tag:
+        description: "release tag, e.g. v0.5.0"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   docker:
@@ -11,6 +26,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}  # build exactly the released tag
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
@@ -18,9 +35,9 @@ jobs:
           images: |
             ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ inputs.tag || github.event.release.tag_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag || github.event.release.tag_name }}
+            type=semver,pattern={{major}},value=${{ inputs.tag || github.event.release.tag_name }}
             type=sha
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -39,5 +56,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ github.event.release.tag_name }}
+          build-args: VERSION=${{ inputs.tag || github.event.release.tag_name }}
           platforms: linux/amd64,linux/arm64

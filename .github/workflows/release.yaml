@@ -11,6 +11,8 @@ jobs:
   release:
     name: Tag & Release
     runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.tag.outputs.new_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,3 +34,14 @@ jobs:
           name: ${{ steps.tag.outputs.new_tag }}
           body: ${{ steps.tag.outputs.changelog }}
           generate_release_notes: true
+
+  docker:
+    name: Image for the new release
+    needs: release
+    if: needs.release.outputs.new_tag
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yaml
+    with:
+      tag: ${{ needs.release.outputs.new_tag }}
