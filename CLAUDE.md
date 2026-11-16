@@ -73,6 +73,7 @@ keystores --> sync-db --> PostgreSQL (encrypted)
 |----------|---------|---------|
 | `DECRYPTION_KEY` | `sync-web3signer-keys` | AES key to decrypt private keys from DB |
 | `WEB3SIGNER_URL` | `sync-validator-keys` | URL of Web3Signer service |
+| `SYNC_KEYS_DB_AUTH` | all commands | `password` (default, from the URL), `aws-iam` (RDS IAM token, needs `AWS_REGION`) or `azure-ad` (Entra ID token). Token modes need a URL without a password and TLS. |
 
 ## Security Considerations
 
