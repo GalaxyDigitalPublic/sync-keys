@@ -11,7 +11,9 @@ def validate_eth_address(ctx, param, value):
 
 
 def validate_db_uri(ctx, param, value):
-    pattern = re.compile(r".+:\/\/.+:.*@.+\/.+")
+    # user:password@ by default; with SYNC_KEYS_DB_AUTH=aws-iam|azure-ad the URL has no password (token auth)
+    token_auth = os.getenv("SYNC_KEYS_DB_AUTH", "password").strip().lower() != "password"
+    pattern = re.compile(r".+:\/\/[^@]+@.+\/.+" if token_auth else r".+:\/\/.+:.*@.+\/.+")
     if not pattern.match(value):
         raise click.BadParameter("Invalid database connection string")
     return value

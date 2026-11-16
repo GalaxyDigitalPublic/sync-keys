@@ -1,5 +1,6 @@
 from typing import List, Optional, Sequence, Tuple
-from urllib.parse import urlparse
+import os
+from urllib.parse import parse_qs, urlparse
 
 import click
 import psycopg2
@@ -212,12 +213,48 @@ def check_db_connection(db_url):
         )
 
 
+DB_AUTH_ENV = "SYNC_KEYS_DB_AUTH"
+DB_AUTH_MODES = ("password", "aws-iam", "azure-ad")
+AZURE_POSTGRES_SCOPE = "https://ossrdbms-aad.database.windows.net/.default"
+INSECURE_SSLMODES = ("disable", "allow", "prefer")
+
+
+def _db_auth_mode() -> str:
+    mode = os.environ.get(DB_AUTH_ENV, "password").strip().lower()
+    if mode not in DB_AUTH_MODES:  # fail closed: a typo must not fall back to a password
+        raise ValueError(f"{DB_AUTH_ENV} must be one of {DB_AUTH_MODES}, got {mode!r}")
+    return mode
+
+
+def _token_password(mode: str, host: str, port: int, user: str) -> str:
+    """Short-lived database credential from the workload identity (no static password)."""
+    if mode == "aws-iam":
+        import boto3  # only needed in this mode
+
+        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+        if not region:
+            raise ValueError("aws-iam database auth needs AWS_REGION (or AWS_DEFAULT_REGION)")
+        return boto3.client("rds", region_name=region).generate_db_auth_token(
+            DBHostname=host, Port=port, DBUsername=user
+        )
+    from azure.identity import DefaultAzureCredential  # only needed in this mode
+
+    return DefaultAzureCredential().get_token(AZURE_POSTGRES_SCOPE).token
+
+
 def _get_db_connection(db_url):
+    """Connect with the URL's password (default), or, with SYNC_KEYS_DB_AUTH=aws-iam|azure-ad, with a token
+    from the pod's cloud identity (RDS IAM / Entra ID). Token modes refuse a password in the URL and plaintext."""
     result = urlparse(db_url)
-    return psycopg2.connect(
-        database=result.path[1:],
-        user=result.username,
-        password=result.password,
-        host=result.hostname,
-        port=result.port,
-    )
+    mode = _db_auth_mode()
+    params = {"database": result.path[1:], "user": result.username, "host": result.hostname, "port": result.port}
+    if mode == "password":  # unchanged behaviour
+        return psycopg2.connect(password=result.password, **params)
+    params.update({k: v[-1] for k, v in parse_qs(result.query).items()})
+    if result.password:
+        raise ValueError(f"{DB_AUTH_ENV}={mode}: remove the password from the database URL")
+    if params.get("sslmode", "require") in INSECURE_SSLMODES:
+        raise ValueError(f"{DB_AUTH_ENV}={mode} needs TLS: sslmode must be require or stricter")
+    params.setdefault("sslmode", "require")
+    params["password"] = _token_password(mode, result.hostname, result.port or 5432, result.username)
+    return psycopg2.connect(**params)
