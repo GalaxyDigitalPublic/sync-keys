@@ -7,7 +7,7 @@ from typing import List
 
 import click
 import yaml
-from web3 import Web3
+from eth_utils import to_hex
 
 from encoder import Decoder
 from database import Database, check_db_connection
@@ -157,7 +157,7 @@ def sync_web3signer_keys(
     private_keys: List[str] = []
     for key_record in keys_records:
         key = decoder.decrypt(data=key_record["private_key"], nonce=key_record["nonce"])
-        hex = Web3.to_hex(int(key))
+        hex = to_hex(int(key))
         private_keys.append(f"0x{hex[2:].zfill(64)}")  # pad missing leading zeros
 
     if not exists(output_dir):
