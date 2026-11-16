@@ -216,7 +216,9 @@ def check_db_connection(db_url):
 DB_AUTH_ENV = "SYNC_KEYS_DB_AUTH"
 DB_AUTH_MODES = ("password", "aws-iam", "azure-ad")
 AZURE_POSTGRES_SCOPE = "https://ossrdbms-aad.database.windows.net/.default"
-INSECURE_SSLMODES = ("disable", "allow", "prefer")
+# Token modes verify the server (a stolen token is a valid login for ~15 min): verify-full only, CA per cloud.
+RDS_CA_BUNDLE = "/etc/ssl/certs/rds-global-bundle.pem"  # baked into the image, see Dockerfile
+CA_FILE_ENV = "SYNC_KEYS_DB_CA_FILE"
 
 
 def _db_auth_mode() -> str:
@@ -253,8 +255,11 @@ def _get_db_connection(db_url):
     params.update({k: v[-1] for k, v in parse_qs(result.query).items()})
     if result.password:
         raise ValueError(f"{DB_AUTH_ENV}={mode}: remove the password from the database URL")
-    if params.get("sslmode", "require") in INSECURE_SSLMODES:
-        raise ValueError(f"{DB_AUTH_ENV}={mode} needs TLS: sslmode must be require or stricter")
-    params.setdefault("sslmode", "require")
+    if params.setdefault("sslmode", "verify-full") != "verify-full":
+        raise ValueError(f"{DB_AUTH_ENV}={mode} verifies the server: sslmode must be verify-full")
+    if "sslrootcert" not in params:
+        params["sslrootcert"] = os.environ.get(CA_FILE_ENV) or (RDS_CA_BUNDLE if mode == "aws-iam" else "system")
+    if params["sslrootcert"] != "system" and not os.path.isfile(params["sslrootcert"]):
+        raise ValueError(f"database CA bundle not found: {params['sslrootcert']} (set {CA_FILE_ENV})")
     params["password"] = _token_password(mode, result.hostname, result.port or 5432, result.username)
     return psycopg2.connect(**params)
