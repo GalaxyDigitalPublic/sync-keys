@@ -1,0 +1,7 @@
+# Input for requirements-build.lock: pip and the build backend for psycopg2-binary's sdist and the ethstaker-deposit
+# git dependency (both built with --no-build-isolation).
+#   uv pip compile --generate-hashes --python-version 3.13 --python-platform x86_64-unknown-linux-musl \
+#     --no-header --annotation-style line -o requirements-build.lock requirements-build.in
+pip==26.3
+setuptools==84.2.1
+wheel==0.48.0
