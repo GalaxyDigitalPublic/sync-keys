@@ -36,3 +36,7 @@ sync-keys = "sync_keys.main:main"
 
 [project.urls]
 "Homepage" = "https://github.com/CryptoManufaktur-io/sync-keys"
+
+[tool.setuptools.packages.find]
+# only the app package; docker/ (image build scripts) is not a Python package
+include = ["sync_keys*"]
