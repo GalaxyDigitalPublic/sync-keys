@@ -46,6 +46,8 @@ jobs:
         uses: pre-commit/action@v3.0.1
         with:
           extra_args: --all-files --show-diff-on-failure
+      - name: Lock matches requirements.txt
+        run: python .github/scripts/check_lock.py
 
   test:
     name: Test
@@ -61,3 +63,23 @@ jobs:
         run: pip install .[test]
       - name: Run tests
         run: pytest tests/ -v --cov=sync_keys --cov-report=term-missing
+
+  # The test job runs on the runner's Python; this one builds the image and checks it from the inside, run the
+  # hardened way (non-root, no capabilities, read-only root): no shell, imports, the charts' invocations, write
+  # access, and a real sync against a throwaway Postgres. A broken runtime image fails the PR.
+  image-smoke:
+    name: Image Smoke Test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (local only, not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: sync-keys:smoke
+      - name: Smoke test the image
+        run: .github/scripts/image_smoke_test.sh sync-keys:smoke

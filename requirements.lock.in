@@ -1,0 +1,7 @@
+# Input for requirements.lock (what the image installs). Regenerate after changing requirements.txt; ethstaker-deposit
+# is built into a wheel in the Dockerfile from the commit ETHSTAKER_DEPOSIT_REF (the v1.3.0 tag), so it is left out of
+# the lock (pip can't hash a git checkout):
+#   uv pip compile --generate-hashes --python-version 3.13 --python-platform x86_64-unknown-linux-musl \
+#     --no-header --annotation-style line --no-emit-package ethstaker-deposit \
+#     -o requirements.lock requirements.lock.in
+-r requirements.txt
